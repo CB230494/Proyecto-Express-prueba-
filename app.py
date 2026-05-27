@@ -2,7 +2,6 @@ import streamlit as st
 import folium
 import requests
 import polyline
-import pandas as pd
 from streamlit_folium import st_folium
 
 st.set_page_config(
@@ -29,19 +28,6 @@ st.markdown("""
     color: white;
 }
 
-.titulo {
-    font-size: 34px;
-    font-weight: 800;
-    color: #ffffff;
-    margin-bottom: 5px;
-}
-
-.subtitulo {
-    font-size: 15px;
-    color: #d1d5db;
-    margin-bottom: 25px;
-}
-
 .card {
     background: white;
     padding: 22px;
@@ -50,25 +36,20 @@ st.markdown("""
     margin-bottom: 18px;
 }
 
-.card h3 {
-    margin-top: 0;
-    color: #111827;
+.precio {
+    color: #16a34a;
+    font-size: 32px;
+    font-weight: 900;
 }
 
-.valor-rojo {
+.rojo {
     color: #ef4444;
     font-weight: 800;
 }
 
-.valor-azul {
+.azul {
     color: #2563eb;
     font-weight: 800;
-}
-
-.valor-verde {
-    color: #16a34a;
-    font-weight: 900;
-    font-size: 28px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -101,12 +82,6 @@ EXPRESS = {
         "lon": -84.07690,
         "direccion": "Barrio Amón, San José",
         "base": 1200
-    },
-    "Express Norte": {
-        "lat": 9.95200,
-        "lon": -84.08000,
-        "direccion": "Av. 47 con Calle Central, San José",
-        "base": 1200
     }
 }
 
@@ -136,6 +111,7 @@ def obtener_ruta_osrm(origen_lat, origen_lon, destino_lat, destino_lon):
 
     try:
         respuesta = requests.get(url, timeout=15)
+
         if respuesta.status_code != 200:
             return None
 
@@ -163,7 +139,6 @@ def crear_mapa(express_data, cliente=None, ruta=None):
         tiles="CartoDB positron"
     )
 
-    # Marcador del express
     folium.Marker(
         location=[express_data["lat"], express_data["lon"]],
         popup="Salida del express",
@@ -171,17 +146,15 @@ def crear_mapa(express_data, cliente=None, ruta=None):
         icon=folium.Icon(color="red", icon="motorcycle", prefix="fa")
     ).add_to(mapa)
 
-    # Ruta
     if ruta:
         folium.PolyLine(
             locations=ruta,
             color="#2563eb",
-            weight=7,
-            opacity=0.85,
-            tooltip="Ruta sugerida por calles"
+            weight=8,
+            opacity=0.9,
+            tooltip="Ruta del express por calles"
         ).add_to(mapa)
 
-    # Marcador del cliente
     if cliente:
         folium.Marker(
             location=[cliente["lat"], cliente["lon"]],
@@ -190,51 +163,12 @@ def crear_mapa(express_data, cliente=None, ruta=None):
             icon=folium.Icon(color="blue", icon="user", prefix="fa")
         ).add_to(mapa)
 
-    mapa.add_child(folium.LatLngPopup())
-
     return mapa
 
 
 # ==============================
-# SIDEBAR
+# SESSION STATE
 # ==============================
-
-with st.sidebar:
-    st.markdown('<div class="titulo">🛵 Express San José Centro</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitulo">Calcula la ruta y el costo del envío.</div>', unsafe_allow_html=True)
-
-    st.markdown("### 1. Selecciona el express de salida")
-    express_seleccionado = st.selectbox(
-        "Express",
-        list(EXPRESS.keys()),
-        label_visibility="collapsed"
-    )
-
-    express_data = EXPRESS[express_seleccionado]
-
-    st.info(
-        f"🔴 **{express_seleccionado}**\n\n"
-        f"📍 {express_data['direccion']}"
-    )
-
-    st.markdown("### 2. Marca el destino del cliente")
-    st.write("Haz clic en el mapa sobre la calle donde está el cliente.")
-
-    st.info(
-        "🔵 La marca azul representa al cliente.\n\n"
-        "🔴 La marca roja representa el punto de salida del express."
-    )
-
-    st.markdown("### 3. Información adicional")
-    nombre_cliente = st.text_input("Cliente opcional", placeholder="Nombre del cliente")
-    telefono = st.text_input("Teléfono opcional", placeholder="Número de teléfono")
-    detalle = st.text_area("Detalle del envío opcional", placeholder="Ej. documentos, paquete pequeño, comida, etc.")
-
-# ==============================
-# APP PRINCIPAL
-# ==============================
-
-st.title("Ruta del express")
 
 if "cliente" not in st.session_state:
     st.session_state.cliente = None
@@ -244,6 +178,65 @@ if "ruta" not in st.session_state:
 
 if "resultado" not in st.session_state:
     st.session_state.resultado = None
+
+if "express_listo" not in st.session_state:
+    st.session_state.express_listo = False
+
+if "servicio_realizado" not in st.session_state:
+    st.session_state.servicio_realizado = False
+
+
+# ==============================
+# SIDEBAR
+# ==============================
+
+with st.sidebar:
+    st.title("🛵 Express San José Centro")
+    st.write("Calcula la ruta y el costo del envío.")
+
+    st.subheader("1. Express de salida")
+
+    express_seleccionado = st.selectbox(
+        "Seleccione el express",
+        list(EXPRESS.keys())
+    )
+
+    express_data = EXPRESS[express_seleccionado]
+
+    st.info(
+        f"🔴 **{express_seleccionado}**\n\n"
+        f"📍 {express_data['direccion']}"
+    )
+
+    st.subheader("2. Estado del express")
+
+    if st.button("Estoy listo para hacer el express 🛵", use_container_width=True):
+        st.session_state.express_listo = True
+        st.session_state.servicio_realizado = False
+
+    if st.session_state.express_listo:
+        st.success("Express listo para recibir ruta.")
+    else:
+        st.warning("El express aún no está listo.")
+
+    st.subheader("3. Datos del cliente")
+
+    nombre_cliente = st.text_input("Cliente opcional")
+    telefono = st.text_input("Teléfono opcional")
+    detalle = st.text_area("Detalle del envío opcional")
+
+    st.info(
+        "🔴 Rojo: salida del express\n\n"
+        "🔵 Azul: destino del cliente\n\n"
+        "🟦 Línea azul: ruta por calles"
+    )
+
+
+# ==============================
+# APP PRINCIPAL
+# ==============================
+
+st.title("Ruta del express")
 
 mapa = crear_mapa(
     express_data=express_data,
@@ -263,23 +256,47 @@ if resultado_mapa and resultado_mapa.get("last_clicked"):
         "lat": resultado_mapa["last_clicked"]["lat"],
         "lon": resultado_mapa["last_clicked"]["lng"]
     }
+    st.session_state.ruta = None
+    st.session_state.resultado = None
+    st.session_state.servicio_realizado = False
+    st.rerun()
 
 st.divider()
 
-col_btn, col_msg = st.columns([1, 2])
+col1, col2, col3 = st.columns(3)
 
-with col_btn:
-    calcular = st.button("Calcular ruta y precio 🚀", use_container_width=True)
-
-with col_msg:
-    if st.session_state.cliente:
-        st.success("Destino del cliente marcado correctamente.")
+with col1:
+    if st.session_state.express_listo:
+        st.success("🛵 Express listo")
     else:
-        st.warning("Primero marca el destino del cliente en el mapa.")
+        st.warning("🛵 Express no listo")
+
+with col2:
+    if st.session_state.cliente:
+        st.success("📍 Cliente marcado")
+    else:
+        st.warning("📍 Marque el destino del cliente")
+
+with col3:
+    if st.session_state.servicio_realizado:
+        st.success("✅ Express realizado")
+    else:
+        st.info("⏳ Servicio pendiente")
+
+
+# ==============================
+# BOTÓN CALCULAR
+# ==============================
+
+calcular = st.button(
+    "Calcular ruta y precio",
+    use_container_width=True,
+    disabled=not st.session_state.express_listo
+)
 
 if calcular:
     if not st.session_state.cliente:
-        st.error("Debes marcar el destino del cliente en el mapa.")
+        st.error("Primero debe marcar el destino del cliente en el mapa.")
     else:
         cliente = st.session_state.cliente
 
@@ -291,7 +308,7 @@ if calcular:
         )
 
         if ruta is None:
-            st.error("No se pudo calcular la ruta por calles. Revisa la conexión a internet.")
+            st.error("No se pudo calcular la ruta por calles.")
         else:
             distancia_km, duracion_min, geometria = ruta
             tarifa = calcular_tarifa(distancia_km, express_data["base"])
@@ -305,49 +322,53 @@ if calcular:
 
             st.rerun()
 
+
 # ==============================
-# RESUMEN
+# RESUMEN DEL SERVICIO
 # ==============================
 
 if st.session_state.resultado:
     resultado = st.session_state.resultado
 
-    col1, col2 = st.columns(2)
+    st.subheader("Resumen del servicio")
 
-    with col1:
+    col_a, col_b = st.columns(2)
+
+    with col_a:
         st.markdown(f"""
         <div class="card">
-            <h3>📋 Resumen del servicio</h3>
-            <p><b>Express:</b> <span class="valor-rojo">{express_seleccionado}</span></p>
+            <h3>📋 Información del envío</h3>
+            <p><b>Express:</b> <span class="rojo">{express_seleccionado}</span></p>
             <p><b>Desde:</b> {express_data["direccion"]}</p>
-            <p><b>Hasta:</b> <span class="valor-azul">Destino marcado por el cliente</span></p>
+            <p><b>Hasta:</b> <span class="azul">Destino marcado por el cliente</span></p>
             <p><b>Distancia:</b> {resultado["distancia_km"]:.2f} km</p>
-            <p><b>Tiempo estimado:</b> {resultado["duracion_min"]:.0f} min</p>
-            <p><b>Precio estimado:</b> <span class="valor-verde">₡{resultado["tarifa"]:,.0f}</span></p>
+            <p><b>Tiempo estimado:</b> {resultado["duracion_min"]:.0f} minutos</p>
+            <p><b>Precio estimado:</b></p>
+            <p class="precio">₡{resultado["tarifa"]:,.0f}</p>
         </div>
         """, unsafe_allow_html=True)
 
-    with col2:
+    with col_b:
         st.markdown(f"""
         <div class="card">
-            <h3>🧭 Ruta</h3>
-            <p>🔴 Punto de salida del express</p>
-            <p>🔵 Destino del cliente</p>
-            <p>🔵 Línea azul: ruta sugerida por calles</p>
-            <hr>
+            <h3>🧾 Datos adicionales</h3>
             <p><b>Cliente:</b> {nombre_cliente if nombre_cliente else "No indicado"}</p>
             <p><b>Teléfono:</b> {telefono if telefono else "No indicado"}</p>
             <p><b>Detalle:</b> {detalle if detalle else "No indicado"}</p>
+            <p><b>Estado:</b> {"✅ Realizado" if st.session_state.servicio_realizado else "⏳ Pendiente"}</p>
         </div>
         """, unsafe_allow_html=True)
 
-else:
-    st.markdown("""
-    <div class="card">
-        <h3>📍 Instrucciones</h3>
-        <p>1. Selecciona el express en el panel izquierdo.</p>
-        <p>2. Haz clic en el mapa sobre la ubicación del cliente.</p>
-        <p>3. Presiona <b>Calcular ruta y precio</b>.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    if not st.session_state.servicio_realizado:
+        if st.button("Marcar express como realizado ✅", use_container_width=True):
+            st.session_state.servicio_realizado = True
+            st.rerun()
+    else:
+        st.success("El express fue marcado como realizado correctamente.")
 
+else:
+    st.info(
+        "Para iniciar: seleccione el express, presione "
+        "'Estoy listo para hacer el express', marque el destino del cliente "
+        "en el mapa y luego calcule la ruta."
+    )
