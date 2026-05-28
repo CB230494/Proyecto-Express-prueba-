@@ -9,10 +9,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ======================================================
-# CONFIGURACIÓN
-# ======================================================
-
 CODIGO_TRABAJADOR = "12345"
 NUMERO_AYUDA = "50660793746"
 LINK_WHATSAPP = (
@@ -20,17 +16,10 @@ LINK_WHATSAPP = (
     "?text=Hola,%20necesito%20ayuda%20con%20la%20plataforma%20de%20servicios."
 )
 
-# ======================================================
-# ESTILOS FIJOS
-# ======================================================
-
 st.markdown("""
 <style>
-:root {
+:root, html, body, .stApp {
     color-scheme: light !important;
-}
-
-html, body, .stApp {
     background: #f3f6fb !important;
     color: #111827 !important;
 }
@@ -44,48 +33,69 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 }
 
 [data-testid="stSidebar"] {
-    background: #0f172a !important;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
 }
 
-[data-testid="stSidebar"] * {
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] div {
     color: #ffffff !important;
 }
 
 input, textarea, select {
-    background-color: #ffffff !important;
+    background: #ffffff !important;
     color: #111827 !important;
-    border: 1px solid #cbd5e1 !important;
+    border: 1px solid #94a3b8 !important;
     border-radius: 12px !important;
-}
-
-button {
-    color: #111827 !important;
 }
 
 .stButton > button {
     width: 100% !important;
-    height: 48px !important;
+    min-height: 48px !important;
     border-radius: 14px !important;
-    font-weight: 800 !important;
+    font-weight: 900 !important;
     font-size: 15px !important;
-    background: #ffffff !important;
-    color: #111827 !important;
-    border: 1px solid #cbd5e1 !important;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+    color: #ffffff !important;
+    border: none !important;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25) !important;
 }
 
 .stButton > button:hover {
-    background: #e5e7eb !important;
-    color: #111827 !important;
+    background: linear-gradient(135deg, #1e40af, #1d4ed8) !important;
+    color: #ffffff !important;
+}
+
+.stButton > button:disabled {
+    background: #64748b !important;
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+
+.stFormSubmitButton > button {
+    width: 100% !important;
+    min-height: 48px !important;
+    border-radius: 14px !important;
+    font-weight: 900 !important;
+    font-size: 15px !important;
+    background: linear-gradient(135deg, #16a34a, #22c55e) !important;
+    color: #ffffff !important;
+    border: none !important;
 }
 
 .stLinkButton > a {
     width: 100% !important;
-    height: 48px !important;
+    min-height: 48px !important;
     border-radius: 14px !important;
     font-weight: 900 !important;
-    background: #16a34a !important;
+    background: linear-gradient(135deg, #16a34a, #22c55e) !important;
     color: #ffffff !important;
     border: none !important;
+    text-align: center !important;
 }
 
 .main-title {
@@ -126,13 +136,13 @@ button {
 .service-card {
     border-radius: 24px;
     padding: 24px;
-    height: 190px;
-    min-height: 190px;
-    max-height: 190px;
+    height: 155px;
+    min-height: 155px;
+    max-height: 155px;
     box-shadow: 0 12px 28px rgba(0,0,0,0.16);
     margin-bottom: 12px;
     display: flex;
-    flex-direction: column;
+    align-items: center;
     justify-content: center;
     text-align: center;
 }
@@ -145,10 +155,6 @@ button {
     font-size: 30px !important;
     line-height: 1.1 !important;
     margin: 0 !important;
-}
-
-.service-card p {
-    display: none !important;
 }
 
 .express { background: linear-gradient(135deg, #ef4444, #f97316); }
@@ -246,14 +252,14 @@ button {
     }
 
     .service-card {
-        height: 135px !important;
-        min-height: 135px !important;
-        max-height: 135px !important;
-        padding: 18px !important;
+        height: 120px !important;
+        min-height: 120px !important;
+        max-height: 120px !important;
+        padding: 16px !important;
     }
 
     .service-card h2 {
-        font-size: 26px !important;
+        font-size: 24px !important;
     }
 
     .card-login {
@@ -263,10 +269,6 @@ button {
 }
 </style>
 """, unsafe_allow_html=True)
-
-# ======================================================
-# DATOS TEMPORALES
-# ======================================================
 
 SERVICIOS = {
     "Express": {
@@ -338,10 +340,6 @@ TRABAJADORES_BASE = [
     },
 ]
 
-# ======================================================
-# SESSION STATE
-# ======================================================
-
 if "pantalla" not in st.session_state:
     st.session_state.pantalla = "inicio"
 
@@ -370,9 +368,6 @@ if "servicio_cliente" in st.session_state:
     if st.session_state.servicio_cliente not in SERVICIOS:
         del st.session_state.servicio_cliente
 
-# ======================================================
-# FUNCIONES
-# ======================================================
 
 def soporte_whatsapp():
     st.markdown("""
@@ -383,7 +378,7 @@ def soporte_whatsapp():
     """, unsafe_allow_html=True)
 
     st.link_button(
-        "💬 Contactar soporte por WhatsApp",
+        "💬 Contactar por WhatsApp",
         LINK_WHATSAPP,
         use_container_width=True
     )
@@ -442,27 +437,31 @@ def crear_solicitud(servicio, trabajador, cliente, telefono_cliente, detalle, lu
 
     return solicitud_id
 
-# ======================================================
-# SIDEBAR
-# ======================================================
 
 with st.sidebar:
-    st.title("Servicios Locales")
+    st.title("🚕 Servicios Locales")
 
     if st.session_state.tipo_usuario:
         st.success(f"Perfil activo: {st.session_state.tipo_usuario}")
 
-    if st.button("Volver al inicio", use_container_width=True):
+    st.markdown("---")
+
+    st.link_button(
+        "💬 Contactar por WhatsApp",
+        LINK_WHATSAPP,
+        use_container_width=True
+    )
+
+    st.markdown("---")
+
+    if st.button("🏠 Volver al inicio", use_container_width=True):
         volver_inicio()
         st.rerun()
 
     st.markdown("---")
-    st.write("Código colaborador de prueba:")
+    st.write("Código colaborador:")
     st.code(CODIGO_TRABAJADOR)
 
-# ======================================================
-# PANTALLA INICIO
-# ======================================================
 
 if st.session_state.pantalla == "inicio":
 
@@ -523,7 +522,7 @@ if st.session_state.pantalla == "inicio":
 
             if entrar_t:
                 if codigo_t != CODIGO_TRABAJADOR:
-                    st.error("Código incorrecto. Solicite el código al coordinador.")
+                    st.error("Código incorrecto.")
                 elif not nombre_t or not cedula_t or not telefono_t:
                     st.error("Debe completar nombre, cédula y teléfono.")
                 else:
@@ -554,9 +553,6 @@ if st.session_state.pantalla == "inicio":
 
     soporte_whatsapp()
 
-# ======================================================
-# PANEL CLIENTE
-# ======================================================
 
 elif st.session_state.pantalla == "cliente":
 
@@ -584,11 +580,12 @@ elif st.session_state.pantalla == "cliente":
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button(f"Ingresar", key=f"btn_{servicio}", use_container_width=True):
+            if st.button("Ingresar", key=f"btn_{servicio}", use_container_width=True):
                 st.session_state.servicio_cliente = servicio
                 st.rerun()
 
     if "servicio_cliente" in st.session_state:
+
         if st.session_state.servicio_cliente not in SERVICIOS:
             del st.session_state.servicio_cliente
             st.rerun()
@@ -613,41 +610,38 @@ elif st.session_state.pantalla == "cliente":
 
         st.subheader("Colaboradores disponibles")
 
-        if not trabajadores_servicio:
-            st.warning("No hay colaboradores registrados para este servicio.")
-        else:
-            for t in trabajadores_servicio:
-                st.markdown(f"""
-                <div class="card">
-                    <h3>{t['nombre']}</h3>
-                    <p><b>Teléfono:</b> {t['telefono']}</p>
-                    <p><b>Servicio:</b> {t['servicio']}</p>
-                    <p><b>Detalle:</b> {t['detalle']}</p>
-                    <p><b>Precio:</b> <span class="precio">{t['precio']}</span></p>
-                    <p><b>Estado:</b> {estado_html(t['estado'])}</p>
-                </div>
-                """, unsafe_allow_html=True)
+        for t in trabajadores_servicio:
+            st.markdown(f"""
+            <div class="card">
+                <h3>{t['nombre']}</h3>
+                <p><b>Teléfono:</b> {t['telefono']}</p>
+                <p><b>Servicio:</b> {t['servicio']}</p>
+                <p><b>Detalle:</b> {t['detalle']}</p>
+                <p><b>Precio:</b> <span class="precio">{t['precio']}</span></p>
+                <p><b>Estado:</b> {estado_html(t['estado'])}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-                if t["estado"] == "Disponible":
-                    with st.expander(f"Solicitar servicio a {t['nombre']}"):
-                        lugar_compra = st.text_input("Lugar de compra / recogida", key=f"compra_{t['id']}")
-                        lugar_entrega = st.text_input("Lugar de entrega / destino", key=f"entrega_{t['id']}")
-                        detalle = st.text_area("Detalle de lo que necesita", key=f"detalle_{t['id']}")
+            if t["estado"] == "Disponible":
+                with st.expander(f"Solicitar servicio a {t['nombre']}"):
+                    lugar_compra = st.text_input("Lugar de compra / recogida", key=f"compra_{t['id']}")
+                    lugar_entrega = st.text_input("Lugar de entrega / destino", key=f"entrega_{t['id']}")
+                    detalle = st.text_area("Detalle de lo que necesita", key=f"detalle_{t['id']}")
 
-                        if st.button(f"Enviar solicitud", key=f"solicitar_{t['id']}", use_container_width=True):
-                            solicitud_id = crear_solicitud(
-                                servicio=servicio_elegido,
-                                trabajador=t,
-                                cliente=usuario["nombre"],
-                                telefono_cliente=usuario["telefono"],
-                                detalle=detalle,
-                                lugar_compra=lugar_compra,
-                                lugar_entrega=lugar_entrega
-                            )
-                            st.success(f"Solicitud enviada. Código: {solicitud_id}")
-                            st.rerun()
-                else:
-                    st.warning("Este colaborador no está disponible actualmente.")
+                    if st.button("Enviar solicitud", key=f"solicitar_{t['id']}", use_container_width=True):
+                        solicitud_id = crear_solicitud(
+                            servicio=servicio_elegido,
+                            trabajador=t,
+                            cliente=usuario["nombre"],
+                            telefono_cliente=usuario["telefono"],
+                            detalle=detalle,
+                            lugar_compra=lugar_compra,
+                            lugar_entrega=lugar_entrega
+                        )
+                        st.success(f"Solicitud enviada. Código: {solicitud_id}")
+                        st.rerun()
+            else:
+                st.warning("Este colaborador no está disponible actualmente.")
 
     st.divider()
     st.subheader("Mis solicitudes y chat")
@@ -698,9 +692,6 @@ elif st.session_state.pantalla == "cliente":
 
     soporte_whatsapp()
 
-# ======================================================
-# PANEL COLABORADOR
-# ======================================================
 
 elif st.session_state.pantalla == "trabajador":
 
