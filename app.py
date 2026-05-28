@@ -3,23 +3,23 @@ from datetime import datetime
 import uuid
 
 st.set_page_config(
-    page_title="Servicios Locales",
+    page_title="Plataforma de Servicios Locales",
     page_icon="🚕",
     layout="wide"
 )
 
 # ======================================================
-# ESTILOS FIJOS
+# ESTILOS
 # ======================================================
 
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%) !important;
+    background: #f3f6fb !important;
     color: #111827 !important;
 }
 
-h1, h2, h3, h4, p, label, span, div {
+h1, h2, h3, h4, h5, h6, p, label, span, div {
     color: #111827 !important;
 }
 
@@ -28,40 +28,66 @@ h1, h2, h3, h4, p, label, span, div {
 }
 
 [data-testid="stSidebar"] * {
-    color: white !important;
+    color: #ffffff !important;
+}
+
+.main-title {
+    font-size: 54px;
+    font-weight: 900;
+    color: #0f172a !important;
+    margin-bottom: 10px;
+}
+
+.main-subtitle {
+    font-size: 20px;
+    color: #475569 !important;
+    margin-bottom: 35px;
 }
 
 .card {
-    background: white;
+    background: #ffffff !important;
     border-radius: 22px;
-    padding: 24px;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+    padding: 26px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
     border: 1px solid #e5e7eb;
     margin-bottom: 18px;
 }
 
-.card-color {
-    border-radius: 24px;
-    padding: 28px;
-    color: white !important;
-    min-height: 180px;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+.card * {
+    color: #111827 !important;
 }
 
-.card-color * {
-    color: white !important;
+.card-login {
+    background: #ffffff !important;
+    border-radius: 24px;
+    padding: 34px;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+    border: 1px solid #e5e7eb;
+    min-height: 310px;
+}
+
+.service-card {
+    border-radius: 24px;
+    padding: 28px;
+    min-height: 185px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+    margin-bottom: 18px;
+}
+
+.service-card * {
+    color: #ffffff !important;
 }
 
 .express { background: linear-gradient(135deg, #ef4444, #f97316); }
-.taxi { background: linear-gradient(135deg, #facc15, #f59e0b); }
-.carga { background: linear-gradient(135deg, #2563eb, #06b6d4); }
-.camion { background: linear-gradient(135deg, #16a34a, #22c55e); }
-.ayuda { background: linear-gradient(135deg, #7c3aed, #ec4899); }
+.taxi { background: linear-gradient(135deg, #ca8a04, #f59e0b); }
+.carga { background: linear-gradient(135deg, #2563eb, #0891b2); }
+.camion { background: linear-gradient(135deg, #15803d, #22c55e); }
+.ayuda { background: linear-gradient(135deg, #6d28d9, #db2777); }
 
 .estado-disponible {
     background: #dcfce7;
     color: #166534 !important;
-    padding: 7px 12px;
+    padding: 7px 13px;
     border-radius: 999px;
     font-weight: 800;
 }
@@ -69,7 +95,7 @@ h1, h2, h3, h4, p, label, span, div {
 .estado-ocupado {
     background: #fee2e2;
     color: #991b1b !important;
-    padding: 7px 12px;
+    padding: 7px 13px;
     border-radius: 999px;
     font-weight: 800;
 }
@@ -77,23 +103,33 @@ h1, h2, h3, h4, p, label, span, div {
 .estado-fuera {
     background: #e5e7eb;
     color: #374151 !important;
-    padding: 7px 12px;
+    padding: 7px 13px;
     border-radius: 999px;
     font-weight: 800;
 }
 
-.chat-user {
-    background: #dbeafe;
-    padding: 12px;
-    border-radius: 16px;
-    margin-bottom: 8px;
+.estado-pendiente {
+    background: #fef3c7;
+    color: #92400e !important;
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-weight: 800;
 }
 
-.chat-worker {
+.estado-aceptado {
+    background: #dbeafe;
+    color: #1d4ed8 !important;
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-weight: 800;
+}
+
+.estado-finalizado {
     background: #dcfce7;
-    padding: 12px;
-    border-radius: 16px;
-    margin-bottom: 8px;
+    color: #166534 !important;
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-weight: 800;
 }
 
 .precio {
@@ -102,10 +138,24 @@ h1, h2, h3, h4, p, label, span, div {
     font-weight: 900;
 }
 
+.chat-user {
+    background: #dbeafe !important;
+    padding: 13px;
+    border-radius: 16px;
+    margin-bottom: 8px;
+}
+
+.chat-worker {
+    background: #dcfce7 !important;
+    padding: 13px;
+    border-radius: 16px;
+    margin-bottom: 8px;
+}
+
 .stButton > button {
     border-radius: 14px !important;
     font-weight: 800 !important;
-    min-height: 45px;
+    min-height: 46px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -121,31 +171,31 @@ SERVICIOS = {
         "icono": "🛵",
         "clase": "express",
         "descripcion": "Mandados, compras rápidas, documentos, comida y entregas pequeñas.",
-        "tarifas": "Base ₡1.000 / 0-2 km. Luego aumenta según distancia."
+        "tarifas": "Base ₡1.000 de 0 a 2 km. De 2 a 5 km: +₡1.000. De 5 a 10 km: +₡2.000."
     },
     "Taxi": {
         "icono": "🚕",
         "clase": "taxi",
         "descripcion": "Traslado de personas dentro y fuera del centro.",
-        "tarifas": "Base ₡1.500 / precio variable según distancia."
+        "tarifas": "Base ₡1.500. El precio aumenta según distancia, horario y destino."
     },
     "Carga": {
         "icono": "📦",
         "clase": "carga",
         "descripcion": "Traslado de paquetes medianos, compras grandes o artículos.",
-        "tarifas": "Base ₡2.000 / depende del peso, volumen y distancia."
+        "tarifas": "Desde ₡2.000. Varía según peso, volumen y distancia."
     },
     "Camión": {
         "icono": "🚚",
         "clase": "camion",
-        "descripcion": "Mudanzas, carga pesada o transporte de materiales.",
-        "tarifas": "Desde ₡5.000 / depende del viaje y carga."
+        "descripcion": "Mudanzas, materiales, carga pesada o transporte especial.",
+        "tarifas": "Desde ₡5.000. Precio según carga, distancia y tiempo."
     },
     "Ayuda": {
         "icono": "🤝",
         "clase": "ayuda",
         "descripcion": "Apoyo para trámites, compras, acompañamientos o asistencia local.",
-        "tarifas": "Precio acordado según servicio."
+        "tarifas": "Precio acordado según el tipo de ayuda solicitada."
     }
 }
 
@@ -157,7 +207,7 @@ TRABAJADORES_BASE = [
         "telefono": "8888-1111",
         "servicio": "Express",
         "estado": "Disponible",
-        "detalle": "Hace mandados, compras y entregas pequeñas.",
+        "detalle": "Mandados, compras y entregas pequeñas.",
         "precio": "₡1.000 base + distancia"
     },
     {
@@ -167,8 +217,8 @@ TRABAJADORES_BASE = [
         "telefono": "8888-2222",
         "servicio": "Taxi",
         "estado": "Disponible",
-        "detalle": "Servicio de taxi local y viajes programados.",
-        "precio": "₡1.500 base"
+        "detalle": "Taxi local y viajes programados.",
+        "precio": "Desde ₡1.500"
     },
     {
         "id": "T003",
@@ -206,6 +256,18 @@ TRABAJADORES_BASE = [
 # SESSION STATE
 # ======================================================
 
+if "pantalla" not in st.session_state:
+    st.session_state.pantalla = "inicio"
+
+if "tipo_usuario" not in st.session_state:
+    st.session_state.tipo_usuario = None
+
+if "usuario_actual" not in st.session_state:
+    st.session_state.usuario_actual = None
+
+if "trabajador_actual" not in st.session_state:
+    st.session_state.trabajador_actual = None
+
 if "trabajadores" not in st.session_state:
     st.session_state.trabajadores = TRABAJADORES_BASE.copy()
 
@@ -218,28 +280,40 @@ if "solicitudes" not in st.session_state:
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 
-if "servicio_actual" not in st.session_state:
-    st.session_state.servicio_actual = None
-
-if "usuario_actual" not in st.session_state:
-    st.session_state.usuario_actual = None
-
-if "trabajador_actual" not in st.session_state:
-    st.session_state.trabajador_actual = None
-
 # ======================================================
 # FUNCIONES
 # ======================================================
+
+def volver_inicio():
+    st.session_state.pantalla = "inicio"
+    st.session_state.tipo_usuario = None
+    st.session_state.usuario_actual = None
+    st.session_state.trabajador_actual = None
+
 
 def estado_html(estado):
     if estado == "Disponible":
         return '<span class="estado-disponible">🟢 Disponible</span>'
     if estado == "Ocupado":
         return '<span class="estado-ocupado">🔴 Ocupado</span>'
-    return '<span class="estado-fuera">⚫ Fuera de servicio</span>'
+    if estado == "Fuera de servicio":
+        return '<span class="estado-fuera">⚫ Fuera de servicio</span>'
+    if estado == "Pendiente":
+        return '<span class="estado-pendiente">⏳ Pendiente</span>'
+    if estado == "Aceptado":
+        return '<span class="estado-aceptado">🛵 Aceptado</span>'
+    if estado == "Finalizado":
+        return '<span class="estado-finalizado">✅ Finalizado</span>'
+    return estado
 
 
-def crear_solicitud(servicio, trabajador, cliente, detalle, lugar_compra, lugar_entrega):
+def cambiar_estado_trabajador(trabajador_id, nuevo_estado):
+    for t in st.session_state.trabajadores:
+        if t["id"] == trabajador_id:
+            t["estado"] = nuevo_estado
+
+
+def crear_solicitud(servicio, trabajador, cliente, telefono_cliente, detalle, lugar_compra, lugar_entrega):
     solicitud_id = str(uuid.uuid4())[:8]
 
     solicitud = {
@@ -250,6 +324,7 @@ def crear_solicitud(servicio, trabajador, cliente, detalle, lugar_compra, lugar_
         "trabajador": trabajador["nombre"],
         "telefono_trabajador": trabajador["telefono"],
         "cliente": cliente,
+        "telefono_cliente": telefono_cliente,
         "detalle": detalle,
         "lugar_compra": lugar_compra,
         "lugar_entrega": lugar_entrega,
@@ -258,14 +333,9 @@ def crear_solicitud(servicio, trabajador, cliente, detalle, lugar_compra, lugar_
 
     st.session_state.solicitudes.append(solicitud)
     st.session_state.chats[solicitud_id] = []
+    cambiar_estado_trabajador(trabajador["id"], "Ocupado")
 
     return solicitud_id
-
-
-def cambiar_estado_trabajador(trabajador_id, nuevo_estado):
-    for t in st.session_state.trabajadores:
-        if t["id"] == trabajador_id:
-            t["estado"] = nuevo_estado
 
 
 # ======================================================
@@ -273,264 +343,282 @@ def cambiar_estado_trabajador(trabajador_id, nuevo_estado):
 # ======================================================
 
 with st.sidebar:
-    st.title("🚕 Plataforma Local")
-    st.write("Express, taxi, carga, camión y ayuda.")
+    st.title("🚕 Servicios Locales")
 
-    perfil = st.radio(
-        "Ingresar como:",
-        ["Inicio", "Usuario", "Trabajador", "Coordinador"]
+    if st.session_state.tipo_usuario:
+        st.success(f"Perfil activo: {st.session_state.tipo_usuario}")
+
+    if st.button("Volver al inicio", use_container_width=True):
+        volver_inicio()
+        st.rerun()
+
+# ======================================================
+# PANTALLA INICIO
+# ======================================================
+
+if st.session_state.pantalla == "inicio":
+
+    st.markdown('<div class="main-title">Servicios Locales</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="main-subtitle">Ingrese como cliente o colaborador para continuar.</div>',
+        unsafe_allow_html=True
     )
 
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("""
+        <div class="card-login">
+            <h2>👤 Cliente</h2>
+            <p>Solicite servicios de express, taxi, carga, camión o ayuda.</p>
+            <p>Podrá ver colaboradores disponibles, precios, estados y usar el chat interno.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.form("registro_cliente"):
+            nombre = st.text_input("Nombre completo")
+            cedula = st.text_input("Número de cédula")
+            telefono = st.text_input("Teléfono")
+            entrar = st.form_submit_button("Registrarme / ingresar como cliente")
+
+            if entrar:
+                if not nombre or not cedula or not telefono:
+                    st.error("Debe completar nombre, cédula y teléfono.")
+                else:
+                    st.session_state.usuario_actual = {
+                        "nombre": nombre,
+                        "cedula": cedula,
+                        "telefono": telefono
+                    }
+                    st.session_state.usuarios.append(st.session_state.usuario_actual)
+                    st.session_state.tipo_usuario = "Cliente"
+                    st.session_state.pantalla = "cliente"
+                    st.rerun()
+
+    with col2:
+        st.markdown("""
+        <div class="card-login">
+            <h2>🛠️ Colaborador</h2>
+            <p>Registre su servicio y administre su estado.</p>
+            <p>El registro requiere un código de 5 dígitos entregado por el coordinador.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.form("registro_trabajador"):
+            nombre_t = st.text_input("Nombre completo", key="nombre_t")
+            cedula_t = st.text_input("Número de cédula", key="cedula_t")
+            telefono_t = st.text_input("Teléfono", key="telefono_t")
+            servicio_t = st.selectbox("Servicio que brinda", list(SERVICIOS.keys()))
+            codigo_t = st.text_input("Código de trabajador", type="password")
+            detalle_t = st.text_area("Descripción breve del servicio")
+            entrar_t = st.form_submit_button("Registrarme / ingresar como colaborador")
+
+            if entrar_t:
+                if codigo_t != CODIGO_TRABAJADOR:
+                    st.error("Código incorrecto. Solicite el código al coordinador.")
+                elif not nombre_t or not cedula_t or not telefono_t:
+                    st.error("Debe completar nombre, cédula y teléfono.")
+                else:
+                    existente = next(
+                        (t for t in st.session_state.trabajadores if t["cedula"] == cedula_t),
+                        None
+                    )
+
+                    if existente:
+                        st.session_state.trabajador_actual = existente
+                    else:
+                        nuevo = {
+                            "id": str(uuid.uuid4())[:5],
+                            "nombre": nombre_t,
+                            "cedula": cedula_t,
+                            "telefono": telefono_t,
+                            "servicio": servicio_t,
+                            "estado": "Disponible",
+                            "detalle": detalle_t if detalle_t else "Servicio disponible.",
+                            "precio": SERVICIOS[servicio_t]["tarifas"]
+                        }
+                        st.session_state.trabajadores.append(nuevo)
+                        st.session_state.trabajador_actual = nuevo
+
+                    st.session_state.tipo_usuario = "Colaborador"
+                    st.session_state.pantalla = "trabajador"
+                    st.rerun()
+
 # ======================================================
-# INICIO
+# PANEL CLIENTE
 # ======================================================
 
-if perfil == "Inicio":
-    st.title("🌈 Servicios Locales")
+elif st.session_state.pantalla == "cliente":
 
-    st.markdown("""
+    usuario = st.session_state.usuario_actual
+
+    st.title("👤 Panel del cliente")
+
+    st.markdown(f"""
     <div class="card">
-        <h3>Bienvenido</h3>
-        <p>Seleccione un servicio para ver información, trabajadores disponibles, precios y solicitar atención.</p>
+        <h3>Bienvenido, {usuario['nombre']}</h3>
+        <p><b>Cédula:</b> {usuario['cedula']}</p>
+        <p><b>Teléfono:</b> {usuario['telefono']}</p>
     </div>
     """, unsafe_allow_html=True)
 
+    st.subheader("Seleccione un servicio")
+
     cols = st.columns(5)
+
+    servicio_elegido = None
 
     for i, (servicio, data) in enumerate(SERVICIOS.items()):
         with cols[i]:
             st.markdown(f"""
-            <div class="card-color {data['clase']}">
+            <div class="service-card {data['clase']}">
                 <h2>{data['icono']} {servicio}</h2>
                 <p>{data['descripcion']}</p>
-                <p><b>{data['tarifas']}</b></p>
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button(f"Información sobre {servicio}", key=f"info_{servicio}", use_container_width=True):
-                st.session_state.servicio_actual = servicio
-                st.rerun()
+            if st.button(f"Ingresar a {servicio}", key=f"btn_{servicio}", use_container_width=True):
+                st.session_state.servicio_cliente = servicio
 
-    if st.session_state.servicio_actual:
-        servicio = st.session_state.servicio_actual
-        data = SERVICIOS[servicio]
+    if "servicio_cliente" in st.session_state:
+        servicio_elegido = st.session_state.servicio_cliente
+        data = SERVICIOS[servicio_elegido]
 
-        st.subheader(f"{data['icono']} {servicio}")
+        st.divider()
 
         st.markdown(f"""
-        <div class="card">
-            <h3>Información sobre el servicio</h3>
-            <p>{data['descripcion']}</p>
+        <div class="service-card {data['clase']}">
+            <h2>{data['icono']} {servicio_elegido}</h2>
+            <p><b>Información del servicio:</b> {data['descripcion']}</p>
             <p><b>Precio por distancia:</b> {data['tarifas']}</p>
-            <p>Para solicitar este servicio, ingrese como <b>Usuario</b>.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-# ======================================================
-# USUARIO
-# ======================================================
-
-elif perfil == "Usuario":
-    st.title("👤 Perfil de usuario")
-
-    with st.expander("Registrar usuario", expanded=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            nombre_usuario = st.text_input("Nombre completo del usuario")
-        with col2:
-            cedula_usuario = st.text_input("Número de cédula del usuario")
-
-        if st.button("Registrar usuario", use_container_width=True):
-            if not nombre_usuario or not cedula_usuario:
-                st.error("Debe completar nombre y cédula.")
-            else:
-                st.session_state.usuario_actual = {
-                    "nombre": nombre_usuario,
-                    "cedula": cedula_usuario
-                }
-                st.success("Usuario registrado correctamente.")
-
-    if st.session_state.usuario_actual:
-        st.markdown(f"""
-        <div class="card">
-            <h3>Usuario activo</h3>
-            <p><b>Nombre:</b> {st.session_state.usuario_actual['nombre']}</p>
-            <p><b>Cédula:</b> {st.session_state.usuario_actual['cedula']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        servicio = st.selectbox("Seleccione el servicio", list(SERVICIOS.keys()))
-
-        data = SERVICIOS[servicio]
-
-        st.markdown(f"""
-        <div class="card-color {data['clase']}">
-            <h2>{data['icono']} {servicio}</h2>
-            <p>{data['descripcion']}</p>
-            <p><b>Precio:</b> {data['tarifas']}</p>
         </div>
         """, unsafe_allow_html=True)
 
         trabajadores_servicio = [
             t for t in st.session_state.trabajadores
-            if t["servicio"] == servicio
+            if t["servicio"] == servicio_elegido
         ]
 
-        st.subheader("Trabajadores disponibles")
+        st.subheader("Colaboradores de este servicio")
 
-        for t in trabajadores_servicio:
-            st.markdown(f"""
-            <div class="card">
-                <h3>{t['nombre']}</h3>
-                <p><b>Teléfono:</b> {t['telefono']}</p>
-                <p><b>Servicio:</b> {t['servicio']}</p>
-                <p><b>Detalle:</b> {t['detalle']}</p>
-                <p><b>Precio:</b> <span class="precio">{t['precio']}</span></p>
-                <p><b>Estado:</b> {estado_html(t['estado'])}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if t["estado"] == "Disponible":
-                with st.expander(f"Solicitar servicio a {t['nombre']}"):
-                    lugar_compra = st.text_input("¿Dónde debe comprar o recoger?", key=f"compra_{t['id']}")
-                    lugar_entrega = st.text_input("¿Dónde debe entregar o llegar?", key=f"entrega_{t['id']}")
-                    detalle = st.text_area("¿Qué necesita?", key=f"detalle_{t['id']}")
-
-                    if st.button(f"Enviar solicitud a {t['nombre']}", key=f"solicitar_{t['id']}", use_container_width=True):
-                        solicitud_id = crear_solicitud(
-                            servicio=servicio,
-                            trabajador=t,
-                            cliente=st.session_state.usuario_actual["nombre"],
-                            detalle=detalle,
-                            lugar_compra=lugar_compra,
-                            lugar_entrega=lugar_entrega
-                        )
-
-                        cambiar_estado_trabajador(t["id"], "Ocupado")
-
-                        st.success(f"Solicitud enviada. Código: {solicitud_id}")
-                        st.info("El trabajador fue marcado como ocupado hasta finalizar el servicio.")
-                        st.rerun()
-            else:
-                st.warning("Este trabajador no está disponible en este momento.")
-
-        st.subheader("Mis solicitudes y chat")
-
-        mis_solicitudes = [
-            s for s in st.session_state.solicitudes
-            if s["cliente"] == st.session_state.usuario_actual["nombre"]
-        ]
-
-        if not mis_solicitudes:
-            st.info("No tiene solicitudes registradas.")
+        if not trabajadores_servicio:
+            st.warning("No hay colaboradores registrados para este servicio.")
         else:
-            for s in mis_solicitudes:
+            for t in trabajadores_servicio:
                 st.markdown(f"""
                 <div class="card">
-                    <h3>Solicitud #{s['id']}</h3>
-                    <p><b>Servicio:</b> {s['servicio']}</p>
-                    <p><b>Trabajador:</b> {s['trabajador']}</p>
-                    <p><b>Estado:</b> {s['estado']}</p>
-                    <p><b>Comprar / recoger:</b> {s['lugar_compra']}</p>
-                    <p><b>Entregar / llegar:</b> {s['lugar_entrega']}</p>
+                    <h3>{t['nombre']}</h3>
+                    <p><b>Teléfono:</b> {t['telefono']}</p>
+                    <p><b>Servicio:</b> {t['servicio']}</p>
+                    <p><b>Detalle:</b> {t['detalle']}</p>
+                    <p><b>Precio:</b> <span class="precio">{t['precio']}</span></p>
+                    <p><b>Estado:</b> {estado_html(t['estado'])}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
-                st.write("💬 Chat interno")
+                if t["estado"] == "Disponible":
+                    with st.expander(f"Solicitar servicio a {t['nombre']}"):
+                        lugar_compra = st.text_input("Lugar de compra / recogida", key=f"compra_{t['id']}")
+                        lugar_entrega = st.text_input("Lugar de entrega / destino", key=f"entrega_{t['id']}")
+                        detalle = st.text_area("Detalle de lo que necesita", key=f"detalle_{t['id']}")
 
-                for msg in st.session_state.chats.get(s["id"], []):
-                    clase = "chat-user" if msg["de"] == "Usuario" else "chat-worker"
-                    st.markdown(f"""
-                    <div class="{clase}">
-                        <b>{msg['de']}:</b> {msg['texto']}<br>
-                        <small>{msg['hora']}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        if st.button(f"Enviar solicitud a {t['nombre']}", key=f"solicitar_{t['id']}", use_container_width=True):
+                            solicitud_id = crear_solicitud(
+                                servicio=servicio_elegido,
+                                trabajador=t,
+                                cliente=usuario["nombre"],
+                                telefono_cliente=usuario["telefono"],
+                                detalle=detalle,
+                                lugar_compra=lugar_compra,
+                                lugar_entrega=lugar_entrega
+                            )
+                            st.success(f"Solicitud enviada. Código: {solicitud_id}")
+                            st.rerun()
+                else:
+                    st.warning("Este colaborador no está disponible actualmente.")
 
-                texto = st.text_input("Escribir mensaje", key=f"msg_user_{s['id']}")
+    st.divider()
+    st.subheader("Mis solicitudes y chat")
 
-                if st.button("Enviar mensaje", key=f"send_user_{s['id']}"):
-                    if texto:
-                        st.session_state.chats[s["id"]].append({
-                            "de": "Usuario",
-                            "texto": texto,
-                            "hora": datetime.now().strftime("%H:%M")
-                        })
-                        st.toast("Mensaje enviado al trabajador.")
-                        st.rerun()
+    mis_solicitudes = [
+        s for s in st.session_state.solicitudes
+        if s["cliente"] == usuario["nombre"]
+    ]
+
+    if not mis_solicitudes:
+        st.info("Todavía no tiene solicitudes.")
+    else:
+        for s in mis_solicitudes:
+            st.markdown(f"""
+            <div class="card">
+                <h3>Solicitud #{s['id']}</h3>
+                <p><b>Servicio:</b> {s['servicio']}</p>
+                <p><b>Colaborador:</b> {s['trabajador']}</p>
+                <p><b>Teléfono colaborador:</b> {s['telefono_trabajador']}</p>
+                <p><b>Estado:</b> {estado_html(s['estado'])}</p>
+                <p><b>Recoger / comprar:</b> {s['lugar_compra']}</p>
+                <p><b>Entregar / destino:</b> {s['lugar_entrega']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.write("💬 Chat interno")
+
+            for msg in st.session_state.chats.get(s["id"], []):
+                clase = "chat-user" if msg["de"] == "Cliente" else "chat-worker"
+                st.markdown(f"""
+                <div class="{clase}">
+                    <b>{msg['de']}:</b> {msg['texto']}<br>
+                    <small>{msg['hora']}</small>
+                </div>
+                """, unsafe_allow_html=True)
+
+            texto = st.text_input("Escribir mensaje", key=f"msg_cliente_{s['id']}")
+
+            if st.button("Enviar mensaje", key=f"send_cliente_{s['id']}"):
+                if texto:
+                    st.session_state.chats[s["id"]].append({
+                        "de": "Cliente",
+                        "texto": texto,
+                        "hora": datetime.now().strftime("%H:%M")
+                    })
+                    st.toast("Mensaje enviado.")
+                    st.rerun()
 
 # ======================================================
-# TRABAJADOR
+# PANEL COLABORADOR
 # ======================================================
 
-elif perfil == "Trabajador":
-    st.title("🛠️ Perfil de trabajador")
+elif st.session_state.pantalla == "trabajador":
 
-    with st.expander("Registrar trabajador", expanded=True):
-        col1, col2, col3 = st.columns(3)
+    trabajador = st.session_state.trabajador_actual
 
-        with col1:
-            nombre = st.text_input("Nombre completo")
-            cedula = st.text_input("Número de cédula")
-        with col2:
-            telefono = st.text_input("Teléfono")
-            servicio = st.selectbox("Servicio que brinda", list(SERVICIOS.keys()))
-        with col3:
-            codigo = st.text_input("Código de trabajador de 5 dígitos", type="password")
-            detalle = st.text_area("Descripción del servicio")
-
-        if st.button("Registrar como trabajador", use_container_width=True):
-            if codigo != CODIGO_TRABAJADOR:
-                st.error("Código incorrecto. Solo el coordinador puede autorizar trabajadores.")
-            elif not nombre or not cedula or not telefono:
-                st.error("Debe completar nombre, cédula y teléfono.")
-            else:
-                nuevo = {
-                    "id": str(uuid.uuid4())[:5],
-                    "nombre": nombre,
-                    "cedula": cedula,
-                    "telefono": telefono,
-                    "servicio": servicio,
-                    "estado": "Disponible",
-                    "detalle": detalle if detalle else "Servicio disponible.",
-                    "precio": SERVICIOS[servicio]["tarifas"]
-                }
-
-                st.session_state.trabajadores.append(nuevo)
-                st.session_state.trabajador_actual = nuevo
-                st.success("Trabajador registrado correctamente.")
-
-    trabajador_nombres = [t["nombre"] for t in st.session_state.trabajadores]
-
-    nombre_login = st.selectbox("Ingresar como trabajador registrado", trabajador_nombres)
-
-    trabajador = next(
-        t for t in st.session_state.trabajadores
-        if t["nombre"] == nombre_login
-    )
-
-    st.session_state.trabajador_actual = trabajador
+    st.title("🛠️ Panel del colaborador")
 
     st.markdown(f"""
     <div class="card">
         <h3>{trabajador['nombre']}</h3>
-        <p><b>Servicio:</b> {trabajador['servicio']}</p>
+        <p><b>Cédula:</b> {trabajador['cedula']}</p>
         <p><b>Teléfono:</b> {trabajador['telefono']}</p>
+        <p><b>Servicio:</b> {trabajador['servicio']}</p>
         <p><b>Estado actual:</b> {estado_html(trabajador['estado'])}</p>
     </div>
     """, unsafe_allow_html=True)
 
-    nuevo_estado = st.selectbox(
-        "Cambiar estado",
-        ["Disponible", "Ocupado", "Fuera de servicio"],
-        index=["Disponible", "Ocupado", "Fuera de servicio"].index(trabajador["estado"])
-    )
+    col1, col2 = st.columns([1, 2])
 
-    if st.button("Actualizar estado", use_container_width=True):
-        cambiar_estado_trabajador(trabajador["id"], nuevo_estado)
-        st.success("Estado actualizado.")
-        st.rerun()
+    with col1:
+        nuevo_estado = st.selectbox(
+            "Cambiar mi estado",
+            ["Disponible", "Ocupado", "Fuera de servicio"],
+            index=["Disponible", "Ocupado", "Fuera de servicio"].index(trabajador["estado"])
+        )
+
+    with col2:
+        if st.button("Actualizar estado", use_container_width=True):
+            cambiar_estado_trabajador(trabajador["id"], nuevo_estado)
+            st.session_state.trabajador_actual["estado"] = nuevo_estado
+            st.success("Estado actualizado.")
+            st.rerun()
 
     st.subheader("Solicitudes asignadas")
 
@@ -546,41 +634,41 @@ elif perfil == "Trabajador":
             st.markdown(f"""
             <div class="card">
                 <h3>Solicitud #{s['id']}</h3>
+                <p><b>Fecha:</b> {s['fecha']}</p>
                 <p><b>Cliente:</b> {s['cliente']}</p>
+                <p><b>Teléfono cliente:</b> {s['telefono_cliente']}</p>
                 <p><b>Servicio:</b> {s['servicio']}</p>
-                <p><b>Estado:</b> {s['estado']}</p>
-                <p><b>Comprar / recoger:</b> {s['lugar_compra']}</p>
-                <p><b>Entregar / llegar:</b> {s['lugar_entrega']}</p>
+                <p><b>Estado:</b> {estado_html(s['estado'])}</p>
+                <p><b>Recoger / comprar:</b> {s['lugar_compra']}</p>
+                <p><b>Entregar / destino:</b> {s['lugar_entrega']}</p>
                 <p><b>Detalle:</b> {s['detalle']}</p>
             </div>
             """, unsafe_allow_html=True)
 
-            col1, col2, col3 = st.columns(3)
+            c1, c2, c3 = st.columns(3)
 
-            with col1:
+            with c1:
                 if st.button(f"Aceptar #{s['id']}", key=f"aceptar_{s['id']}", use_container_width=True):
                     s["estado"] = "Aceptado"
                     cambiar_estado_trabajador(trabajador["id"], "Ocupado")
-                    st.toast("Solicitud aceptada.")
                     st.rerun()
 
-            with col2:
-                if st.button(f"Pendiente #{s['id']}", key=f"pendiente_{s['id']}", use_container_width=True):
+            with c2:
+                if st.button(f"Dejar pendiente #{s['id']}", key=f"pendiente_{s['id']}", use_container_width=True):
                     s["estado"] = "Pendiente"
-                    st.toast("Solicitud pendiente.")
                     st.rerun()
 
-            with col3:
+            with c3:
                 if st.button(f"Finalizar #{s['id']}", key=f"finalizar_{s['id']}", use_container_width=True):
                     s["estado"] = "Finalizado"
                     cambiar_estado_trabajador(trabajador["id"], "Disponible")
-                    st.toast("Servicio finalizado. Trabajador disponible.")
+                    st.session_state.trabajador_actual["estado"] = "Disponible"
                     st.rerun()
 
             st.write("💬 Chat con el cliente")
 
             for msg in st.session_state.chats.get(s["id"], []):
-                clase = "chat-worker" if msg["de"] == "Trabajador" else "chat-user"
+                clase = "chat-worker" if msg["de"] == "Colaborador" else "chat-user"
                 st.markdown(f"""
                 <div class="{clase}">
                     <b>{msg['de']}:</b> {msg['texto']}<br>
@@ -588,61 +676,16 @@ elif perfil == "Trabajador":
                 </div>
                 """, unsafe_allow_html=True)
 
-            texto = st.text_input("Responder mensaje", key=f"msg_worker_{s['id']}")
+            texto = st.text_input("Responder mensaje", key=f"msg_colaborador_{s['id']}")
 
-            if st.button("Enviar respuesta", key=f"send_worker_{s['id']}"):
+            if st.button("Enviar respuesta", key=f"send_colaborador_{s['id']}"):
                 if texto:
                     st.session_state.chats[s["id"]].append({
-                        "de": "Trabajador",
+                        "de": "Colaborador",
                         "texto": texto,
                         "hora": datetime.now().strftime("%H:%M")
                     })
-                    st.toast("Mensaje enviado al usuario.")
+                    st.toast("Mensaje enviado.")
                     st.rerun()
 
             st.divider()
-
-# ======================================================
-# COORDINADOR
-# ======================================================
-
-elif perfil == "Coordinador":
-    st.title("📊 Panel del coordinador")
-
-    st.markdown("""
-    <div class="card">
-        <h3>Código actual para registrar trabajadores</h3>
-        <p class="precio">12345</p>
-        <p>Este código se puede cambiar luego cuando conectemos base de datos.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.subheader("Trabajadores registrados")
-
-    for t in st.session_state.trabajadores:
-        st.markdown(f"""
-        <div class="card">
-            <h3>{t['nombre']}</h3>
-            <p><b>Cédula:</b> {t['cedula']}</p>
-            <p><b>Teléfono:</b> {t['telefono']}</p>
-            <p><b>Servicio:</b> {t['servicio']}</p>
-            <p><b>Estado:</b> {estado_html(t['estado'])}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.subheader("Solicitudes")
-
-    if not st.session_state.solicitudes:
-        st.info("No hay solicitudes todavía.")
-    else:
-        for s in st.session_state.solicitudes:
-            st.markdown(f"""
-            <div class="card">
-                <h3>Solicitud #{s['id']}</h3>
-                <p><b>Fecha:</b> {s['fecha']}</p>
-                <p><b>Cliente:</b> {s['cliente']}</p>
-                <p><b>Trabajador:</b> {s['trabajador']}</p>
-                <p><b>Servicio:</b> {s['servicio']}</p>
-                <p><b>Estado:</b> {s['estado']}</p>
-            </div>
-            """, unsafe_allow_html=True)
