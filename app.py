@@ -3,9 +3,10 @@ from datetime import datetime
 import uuid
 
 st.set_page_config(
-    page_title="Plataforma de Servicios Locales",
+    page_title="Servicios Locales",
     page_icon="🚕",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 # ======================================================
@@ -20,14 +21,22 @@ LINK_WHATSAPP = (
 )
 
 # ======================================================
-# ESTILOS
+# ESTILOS FIJOS
 # ======================================================
 
 st.markdown("""
 <style>
-.stApp {
+:root {
+    color-scheme: light !important;
+}
+
+html, body, .stApp {
     background: #f3f6fb !important;
     color: #111827 !important;
+}
+
+* {
+    color-scheme: light !important;
 }
 
 h1, h2, h3, h4, h5, h6, p, label, span, div {
@@ -35,30 +44,67 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 }
 
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
+    background: #0f172a !important;
 }
 
 [data-testid="stSidebar"] * {
     color: #ffffff !important;
 }
 
+input, textarea, select {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 12px !important;
+}
+
+button {
+    color: #111827 !important;
+}
+
+.stButton > button {
+    width: 100% !important;
+    height: 48px !important;
+    border-radius: 14px !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #cbd5e1 !important;
+}
+
+.stButton > button:hover {
+    background: #e5e7eb !important;
+    color: #111827 !important;
+}
+
+.stLinkButton > a {
+    width: 100% !important;
+    height: 48px !important;
+    border-radius: 14px !important;
+    font-weight: 900 !important;
+    background: #16a34a !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
 .main-title {
-    font-size: 54px;
+    font-size: 46px;
     font-weight: 900;
     color: #0f172a !important;
-    margin-bottom: 10px;
+    margin-bottom: 4px;
 }
 
 .main-subtitle {
-    font-size: 20px;
+    font-size: 18px;
     color: #475569 !important;
-    margin-bottom: 35px;
+    margin-bottom: 24px;
 }
 
 .card {
     background: #ffffff !important;
     border-radius: 22px;
-    padding: 26px;
+    padding: 24px;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
     border: 1px solid #e5e7eb;
     margin-bottom: 18px;
@@ -71,21 +117,24 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 .card-login {
     background: #ffffff !important;
     border-radius: 24px;
-    padding: 34px;
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+    padding: 28px;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
     border: 1px solid #e5e7eb;
-    min-height: 310px;
+    min-height: 240px;
 }
 
 .service-card {
     border-radius: 24px;
     padding: 24px;
-    height: 300px;
-    min-height: 300px;
-    max-height: 300px;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.16);
-    margin-bottom: 14px;
-    overflow: hidden;
+    height: 190px;
+    min-height: 190px;
+    max-height: 190px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.16);
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
 }
 
 .service-card * {
@@ -93,14 +142,13 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 }
 
 .service-card h2 {
-    font-size: 34px !important;
+    font-size: 30px !important;
     line-height: 1.1 !important;
-    word-break: normal !important;
+    margin: 0 !important;
 }
 
 .service-card p {
-    font-size: 18px !important;
-    line-height: 1.4 !important;
+    display: none !important;
 }
 
 .express { background: linear-gradient(135deg, #ef4444, #f97316); }
@@ -158,7 +206,7 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 
 .precio {
     color: #16a34a !important;
-    font-size: 26px;
+    font-size: 24px;
     font-weight: 900;
 }
 
@@ -176,12 +224,42 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
     margin-bottom: 8px;
 }
 
-.stButton > button {
-    width: 100% !important;
-    height: 52px !important;
-    border-radius: 14px !important;
-    font-weight: 800 !important;
-    font-size: 16px !important;
+.help-box {
+    background: #052e16 !important;
+    border-radius: 18px;
+    padding: 18px;
+    margin-top: 25px;
+    margin-bottom: 15px;
+}
+
+.help-box * {
+    color: #ffffff !important;
+}
+
+@media (max-width: 768px) {
+    .main-title {
+        font-size: 34px !important;
+    }
+
+    .main-subtitle {
+        font-size: 16px !important;
+    }
+
+    .service-card {
+        height: 135px !important;
+        min-height: 135px !important;
+        max-height: 135px !important;
+        padding: 18px !important;
+    }
+
+    .service-card h2 {
+        font-size: 26px !important;
+    }
+
+    .card-login {
+        min-height: auto !important;
+        padding: 22px !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -288,9 +366,28 @@ if "solicitudes" not in st.session_state:
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 
+if "servicio_cliente" in st.session_state:
+    if st.session_state.servicio_cliente not in SERVICIOS:
+        del st.session_state.servicio_cliente
+
 # ======================================================
 # FUNCIONES
 # ======================================================
+
+def soporte_whatsapp():
+    st.markdown("""
+    <div class="help-box">
+        <h3>¿Necesita ayuda?</h3>
+        <p>Puede contactar al encargado de la plataforma por WhatsApp.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.link_button(
+        "💬 Contactar soporte por WhatsApp",
+        LINK_WHATSAPP,
+        use_container_width=True
+    )
+
 
 def volver_inicio():
     st.session_state.pantalla = "inicio"
@@ -350,24 +447,18 @@ def crear_solicitud(servicio, trabajador, cliente, telefono_cliente, detalle, lu
 # ======================================================
 
 with st.sidebar:
-    st.title("🚕 Servicios Locales")
+    st.title("Servicios Locales")
 
     if st.session_state.tipo_usuario:
         st.success(f"Perfil activo: {st.session_state.tipo_usuario}")
 
-    st.markdown("---")
-    st.markdown("### ¿Necesita ayuda?")
-    st.link_button(
-        "Contactar por WhatsApp",
-        LINK_WHATSAPP,
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
     if st.button("Volver al inicio", use_container_width=True):
         volver_inicio()
         st.rerun()
+
+    st.markdown("---")
+    st.write("Código colaborador de prueba:")
+    st.code(CODIGO_TRABAJADOR)
 
 # ======================================================
 # PANTALLA INICIO
@@ -396,7 +487,7 @@ if st.session_state.pantalla == "inicio":
             nombre = st.text_input("Nombre completo")
             cedula = st.text_input("Número de cédula")
             telefono = st.text_input("Teléfono")
-            entrar = st.form_submit_button("Registrarme / ingresar como cliente")
+            entrar = st.form_submit_button("Ingresar como cliente")
 
             if entrar:
                 if not nombre or not cedula or not telefono:
@@ -417,8 +508,7 @@ if st.session_state.pantalla == "inicio":
         <div class="card-login">
             <h2>🛠️ Colaborador</h2>
             <p>Registre su servicio y administre su estado.</p>
-            <p>El registro requiere un código de 5 dígitos entregado por el coordinador.</p>
-            <p><b>Código de prueba:</b> 12345</p>
+            <p>El registro requiere un código de 5 dígitos.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -429,7 +519,7 @@ if st.session_state.pantalla == "inicio":
             servicio_t = st.selectbox("Servicio que brinda", list(SERVICIOS.keys()))
             codigo_t = st.text_input("Código de trabajador", type="password")
             detalle_t = st.text_area("Descripción breve del servicio")
-            entrar_t = st.form_submit_button("Registrarme / ingresar como colaborador")
+            entrar_t = st.form_submit_button("Ingresar como colaborador")
 
             if entrar_t:
                 if codigo_t != CODIGO_TRABAJADOR:
@@ -462,6 +552,8 @@ if st.session_state.pantalla == "inicio":
                     st.session_state.pantalla = "trabajador"
                     st.rerun()
 
+    soporte_whatsapp()
+
 # ======================================================
 # PANEL CLIENTE
 # ======================================================
@@ -470,7 +562,7 @@ elif st.session_state.pantalla == "cliente":
 
     usuario = st.session_state.usuario_actual
 
-    st.title("👤 Panel del cliente")
+    st.title("Panel del cliente")
 
     st.markdown(f"""
     <div class="card">
@@ -488,26 +580,29 @@ elif st.session_state.pantalla == "cliente":
         with cols[i]:
             st.markdown(f"""
             <div class="service-card {data['clase']}">
-                <h2>{data['icono']} {servicio}</h2>
-                <p>{data['descripcion']}</p>
+                <h2>{data['icono']}<br>{servicio}</h2>
             </div>
             """, unsafe_allow_html=True)
 
-            if st.button(f"Ingresar a {servicio}", key=f"btn_{servicio}", use_container_width=True):
+            if st.button(f"Ingresar", key=f"btn_{servicio}", use_container_width=True):
                 st.session_state.servicio_cliente = servicio
                 st.rerun()
 
     if "servicio_cliente" in st.session_state:
+        if st.session_state.servicio_cliente not in SERVICIOS:
+            del st.session_state.servicio_cliente
+            st.rerun()
+
         servicio_elegido = st.session_state.servicio_cliente
         data = SERVICIOS[servicio_elegido]
 
         st.divider()
 
         st.markdown(f"""
-        <div class="service-card {data['clase']}">
+        <div class="card">
             <h2>{data['icono']} {servicio_elegido}</h2>
             <p><b>Información del servicio:</b> {data['descripcion']}</p>
-            <p><b>Precio por distancia:</b> {data['tarifas']}</p>
+            <p><b>Precio:</b> <span class="precio">{data['tarifas']}</span></p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -516,7 +611,7 @@ elif st.session_state.pantalla == "cliente":
             if t["servicio"] == servicio_elegido
         ]
 
-        st.subheader("Colaboradores de este servicio")
+        st.subheader("Colaboradores disponibles")
 
         if not trabajadores_servicio:
             st.warning("No hay colaboradores registrados para este servicio.")
@@ -539,7 +634,7 @@ elif st.session_state.pantalla == "cliente":
                         lugar_entrega = st.text_input("Lugar de entrega / destino", key=f"entrega_{t['id']}")
                         detalle = st.text_area("Detalle de lo que necesita", key=f"detalle_{t['id']}")
 
-                        if st.button(f"Enviar solicitud a {t['nombre']}", key=f"solicitar_{t['id']}", use_container_width=True):
+                        if st.button(f"Enviar solicitud", key=f"solicitar_{t['id']}", use_container_width=True):
                             solicitud_id = crear_solicitud(
                                 servicio=servicio_elegido,
                                 trabajador=t,
@@ -578,7 +673,7 @@ elif st.session_state.pantalla == "cliente":
             </div>
             """, unsafe_allow_html=True)
 
-            st.write("💬 Chat interno")
+            st.write("Chat interno")
 
             for msg in st.session_state.chats.get(s["id"], []):
                 clase = "chat-user" if msg["de"] == "Cliente" else "chat-worker"
@@ -601,6 +696,8 @@ elif st.session_state.pantalla == "cliente":
                     st.toast("Mensaje enviado.")
                     st.rerun()
 
+    soporte_whatsapp()
+
 # ======================================================
 # PANEL COLABORADOR
 # ======================================================
@@ -609,7 +706,7 @@ elif st.session_state.pantalla == "trabajador":
 
     trabajador = st.session_state.trabajador_actual
 
-    st.title("🛠️ Panel del colaborador")
+    st.title("Panel del colaborador")
 
     st.markdown(f"""
     <div class="card">
@@ -671,7 +768,7 @@ elif st.session_state.pantalla == "trabajador":
                     st.rerun()
 
             with c2:
-                if st.button(f"Dejar pendiente #{s['id']}", key=f"pendiente_{s['id']}", use_container_width=True):
+                if st.button(f"Pendiente #{s['id']}", key=f"pendiente_{s['id']}", use_container_width=True):
                     s["estado"] = "Pendiente"
                     st.rerun()
 
@@ -682,7 +779,7 @@ elif st.session_state.pantalla == "trabajador":
                     st.session_state.trabajador_actual["estado"] = "Disponible"
                     st.rerun()
 
-            st.write("💬 Chat con el cliente")
+            st.write("Chat con el cliente")
 
             for msg in st.session_state.chats.get(s["id"], []):
                 clase = "chat-worker" if msg["de"] == "Colaborador" else "chat-user"
@@ -706,3 +803,5 @@ elif st.session_state.pantalla == "trabajador":
                     st.rerun()
 
             st.divider()
+
+    soporte_whatsapp()
