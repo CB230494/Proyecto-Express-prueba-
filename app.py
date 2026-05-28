@@ -9,6 +9,17 @@ st.set_page_config(
 )
 
 # ======================================================
+# CONFIGURACIÓN
+# ======================================================
+
+CODIGO_TRABAJADOR = "12345"
+NUMERO_AYUDA = "50660793746"
+LINK_WHATSAPP = (
+    f"https://wa.me/{NUMERO_AYUDA}"
+    "?text=Hola,%20necesito%20ayuda%20con%20la%20plataforma%20de%20servicios."
+)
+
+# ======================================================
 # ESTILOS
 # ======================================================
 
@@ -68,21 +79,34 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 
 .service-card {
     border-radius: 24px;
-    padding: 28px;
-    min-height: 185px;
+    padding: 24px;
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
     box-shadow: 0 12px 30px rgba(0,0,0,0.16);
-    margin-bottom: 18px;
+    margin-bottom: 14px;
+    overflow: hidden;
 }
 
 .service-card * {
     color: #ffffff !important;
 }
 
+.service-card h2 {
+    font-size: 34px !important;
+    line-height: 1.1 !important;
+    word-break: normal !important;
+}
+
+.service-card p {
+    font-size: 18px !important;
+    line-height: 1.4 !important;
+}
+
 .express { background: linear-gradient(135deg, #ef4444, #f97316); }
 .taxi { background: linear-gradient(135deg, #ca8a04, #f59e0b); }
 .carga { background: linear-gradient(135deg, #2563eb, #0891b2); }
 .camion { background: linear-gradient(135deg, #15803d, #22c55e); }
-.ayuda { background: linear-gradient(135deg, #6d28d9, #db2777); }
 
 .estado-disponible {
     background: #dcfce7;
@@ -153,9 +177,11 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 }
 
 .stButton > button {
+    width: 100% !important;
+    height: 52px !important;
     border-radius: 14px !important;
     font-weight: 800 !important;
-    min-height: 46px;
+    font-size: 16px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -163,8 +189,6 @@ h1, h2, h3, h4, h5, h6, p, label, span, div {
 # ======================================================
 # DATOS TEMPORALES
 # ======================================================
-
-CODIGO_TRABAJADOR = "12345"
 
 SERVICIOS = {
     "Express": {
@@ -190,12 +214,6 @@ SERVICIOS = {
         "clase": "camion",
         "descripcion": "Mudanzas, materiales, carga pesada o transporte especial.",
         "tarifas": "Desde ₡5.000. Precio según carga, distancia y tiempo."
-    },
-    "Ayuda": {
-        "icono": "🤝",
-        "clase": "ayuda",
-        "descripcion": "Apoyo para trámites, compras, acompañamientos o asistencia local.",
-        "tarifas": "Precio acordado según el tipo de ayuda solicitada."
     }
 }
 
@@ -239,16 +257,6 @@ TRABAJADORES_BASE = [
         "estado": "Fuera de servicio",
         "detalle": "Camión para carga y mudanzas.",
         "precio": "Desde ₡5.000"
-    },
-    {
-        "id": "T005",
-        "nombre": "Ana Rodríguez",
-        "cedula": "505550555",
-        "telefono": "8888-5555",
-        "servicio": "Ayuda",
-        "estado": "Disponible",
-        "detalle": "Apoyo en trámites, compras y asistencia.",
-        "precio": "Precio acordado"
     },
 ]
 
@@ -337,7 +345,6 @@ def crear_solicitud(servicio, trabajador, cliente, telefono_cliente, detalle, lu
 
     return solicitud_id
 
-
 # ======================================================
 # SIDEBAR
 # ======================================================
@@ -347,6 +354,16 @@ with st.sidebar:
 
     if st.session_state.tipo_usuario:
         st.success(f"Perfil activo: {st.session_state.tipo_usuario}")
+
+    st.markdown("---")
+    st.markdown("### ¿Necesita ayuda?")
+    st.link_button(
+        "Contactar por WhatsApp",
+        LINK_WHATSAPP,
+        use_container_width=True
+    )
+
+    st.markdown("---")
 
     if st.button("Volver al inicio", use_container_width=True):
         volver_inicio()
@@ -370,7 +387,7 @@ if st.session_state.pantalla == "inicio":
         st.markdown("""
         <div class="card-login">
             <h2>👤 Cliente</h2>
-            <p>Solicite servicios de express, taxi, carga, camión o ayuda.</p>
+            <p>Solicite servicios de express, taxi, carga o camión.</p>
             <p>Podrá ver colaboradores disponibles, precios, estados y usar el chat interno.</p>
         </div>
         """, unsafe_allow_html=True)
@@ -401,6 +418,7 @@ if st.session_state.pantalla == "inicio":
             <h2>🛠️ Colaborador</h2>
             <p>Registre su servicio y administre su estado.</p>
             <p>El registro requiere un código de 5 dígitos entregado por el coordinador.</p>
+            <p><b>Código de prueba:</b> 12345</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -464,9 +482,7 @@ elif st.session_state.pantalla == "cliente":
 
     st.subheader("Seleccione un servicio")
 
-    cols = st.columns(5)
-
-    servicio_elegido = None
+    cols = st.columns(4)
 
     for i, (servicio, data) in enumerate(SERVICIOS.items()):
         with cols[i]:
@@ -479,6 +495,7 @@ elif st.session_state.pantalla == "cliente":
 
             if st.button(f"Ingresar a {servicio}", key=f"btn_{servicio}", use_container_width=True):
                 st.session_state.servicio_cliente = servicio
+                st.rerun()
 
     if "servicio_cliente" in st.session_state:
         servicio_elegido = st.session_state.servicio_cliente
