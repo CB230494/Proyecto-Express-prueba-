@@ -1,524 +1,648 @@
 import streamlit as st
-import folium
-import requests
-import polyline
-from streamlit_folium import st_folium
 from datetime import datetime
 import uuid
 
 st.set_page_config(
-    page_title="Express Siquirres / San José",
-    page_icon="🛵",
+    page_title="Servicios Locales",
+    page_icon="🚕",
     layout="wide"
 )
 
-# =====================================================
-# ESTILOS FIJOS PARA EVITAR PROBLEMAS MODO CLARO/OSCURO
-# =====================================================
+# ======================================================
+# ESTILOS FIJOS
+# ======================================================
 
 st.markdown("""
 <style>
-html, body, .stApp {
-    background-color: #f4f6f9 !important;
+.stApp {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%) !important;
+    color: #111827 !important;
+}
+
+h1, h2, h3, h4, p, label, span, div {
     color: #111827 !important;
 }
 
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #07111f 0%, #101827 100%) !important;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
 }
 
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span,
-[data-testid="stSidebar"] div {
-    color: #ffffff !important;
-}
-
-h1, h2, h3, h4, h5, h6, p, label, span, div {
-    color: #111827;
+[data-testid="stSidebar"] * {
+    color: white !important;
 }
 
 .card {
-    background: #ffffff !important;
-    color: #111827 !important;
-    padding: 22px;
-    border-radius: 18px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.10);
-    margin-bottom: 18px;
+    background: white;
+    border-radius: 22px;
+    padding: 24px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
     border: 1px solid #e5e7eb;
+    margin-bottom: 18px;
 }
 
-.card * {
-    color: #111827 !important;
+.card-color {
+    border-radius: 24px;
+    padding: 28px;
+    color: white !important;
+    min-height: 180px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.18);
 }
 
-.card-dark {
-    background: #0f172a !important;
-    color: #ffffff !important;
-    padding: 20px;
-    border-radius: 16px;
-    margin-bottom: 16px;
+.card-color * {
+    color: white !important;
 }
 
-.card-dark * {
-    color: #ffffff !important;
-}
+.express { background: linear-gradient(135deg, #ef4444, #f97316); }
+.taxi { background: linear-gradient(135deg, #facc15, #f59e0b); }
+.carga { background: linear-gradient(135deg, #2563eb, #06b6d4); }
+.camion { background: linear-gradient(135deg, #16a34a, #22c55e); }
+.ayuda { background: linear-gradient(135deg, #7c3aed, #ec4899); }
 
-.estado-pendiente {
-    background: #fef3c7;
-    color: #92400e !important;
-    padding: 8px 14px;
-    border-radius: 12px;
-    font-weight: 800;
-}
-
-.estado-aceptado {
-    background: #dbeafe;
-    color: #1d4ed8 !important;
-    padding: 8px 14px;
-    border-radius: 12px;
-    font-weight: 800;
-}
-
-.estado-realizado {
+.estado-disponible {
     background: #dcfce7;
     color: #166534 !important;
-    padding: 8px 14px;
-    border-radius: 12px;
+    padding: 7px 12px;
+    border-radius: 999px;
     font-weight: 800;
+}
+
+.estado-ocupado {
+    background: #fee2e2;
+    color: #991b1b !important;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-weight: 800;
+}
+
+.estado-fuera {
+    background: #e5e7eb;
+    color: #374151 !important;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-weight: 800;
+}
+
+.chat-user {
+    background: #dbeafe;
+    padding: 12px;
+    border-radius: 16px;
+    margin-bottom: 8px;
+}
+
+.chat-worker {
+    background: #dcfce7;
+    padding: 12px;
+    border-radius: 16px;
+    margin-bottom: 8px;
 }
 
 .precio {
     color: #16a34a !important;
-    font-size: 34px;
-    font-weight: 900;
-}
-
-.rojo {
-    color: #ef4444 !important;
-    font-weight: 900;
-}
-
-.azul {
-    color: #2563eb !important;
+    font-size: 26px;
     font-weight: 900;
 }
 
 .stButton > button {
-    background-color: #16a34a !important;
-    color: white !important;
-    border-radius: 12px !important;
+    border-radius: 14px !important;
     font-weight: 800 !important;
-    border: none !important;
-}
-
-.stButton > button:hover {
-    background-color: #15803d !important;
-    color: white !important;
+    min-height: 45px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# =====================================================
-# CONFIGURACIÓN GENERAL
-# =====================================================
+# ======================================================
+# DATOS TEMPORALES
+# ======================================================
 
-CENTRO_MAPA = [10.0975, -83.5066]
+CODIGO_TRABAJADOR = "12345"
 
-EXPRESS = {
-    "Express Siquirres Centro": {
-        "lat": 10.0975,
-        "lon": -83.5066,
-        "direccion": "Siquirres Centro",
-        "base": 1000
+SERVICIOS = {
+    "Express": {
+        "icono": "🛵",
+        "clase": "express",
+        "descripcion": "Mandados, compras rápidas, documentos, comida y entregas pequeñas.",
+        "tarifas": "Base ₡1.000 / 0-2 km. Luego aumenta según distancia."
     },
-    "Express Terminal Siquirres": {
-        "lat": 10.0968,
-        "lon": -83.5078,
-        "direccion": "Terminal de Siquirres",
-        "base": 1000
+    "Taxi": {
+        "icono": "🚕",
+        "clase": "taxi",
+        "descripcion": "Traslado de personas dentro y fuera del centro.",
+        "tarifas": "Base ₡1.500 / precio variable según distancia."
     },
-    "Express Hospital Siquirres": {
-        "lat": 10.1003,
-        "lon": -83.5095,
-        "direccion": "Sector Hospital de Siquirres",
-        "base": 1200
+    "Carga": {
+        "icono": "📦",
+        "clase": "carga",
+        "descripcion": "Traslado de paquetes medianos, compras grandes o artículos.",
+        "tarifas": "Base ₡2.000 / depende del peso, volumen y distancia."
     },
-    "Express Ruta 32 Siquirres": {
-        "lat": 10.0948,
-        "lon": -83.5009,
-        "direccion": "Sector Ruta 32, Siquirres",
-        "base": 1200
+    "Camión": {
+        "icono": "🚚",
+        "clase": "camion",
+        "descripcion": "Mudanzas, carga pesada o transporte de materiales.",
+        "tarifas": "Desde ₡5.000 / depende del viaje y carga."
+    },
+    "Ayuda": {
+        "icono": "🤝",
+        "clase": "ayuda",
+        "descripcion": "Apoyo para trámites, compras, acompañamientos o asistencia local.",
+        "tarifas": "Precio acordado según servicio."
     }
 }
 
-# =====================================================
+TRABAJADORES_BASE = [
+    {
+        "id": "T001",
+        "nombre": "Carlos Méndez",
+        "cedula": "101110111",
+        "telefono": "8888-1111",
+        "servicio": "Express",
+        "estado": "Disponible",
+        "detalle": "Hace mandados, compras y entregas pequeñas.",
+        "precio": "₡1.000 base + distancia"
+    },
+    {
+        "id": "T002",
+        "nombre": "María Solano",
+        "cedula": "202220222",
+        "telefono": "8888-2222",
+        "servicio": "Taxi",
+        "estado": "Disponible",
+        "detalle": "Servicio de taxi local y viajes programados.",
+        "precio": "₡1.500 base"
+    },
+    {
+        "id": "T003",
+        "nombre": "José Vargas",
+        "cedula": "303330333",
+        "telefono": "8888-3333",
+        "servicio": "Carga",
+        "estado": "Ocupado",
+        "detalle": "Carga liviana y paquetes medianos.",
+        "precio": "Desde ₡2.000"
+    },
+    {
+        "id": "T004",
+        "nombre": "Luis Ramírez",
+        "cedula": "404440444",
+        "telefono": "8888-4444",
+        "servicio": "Camión",
+        "estado": "Fuera de servicio",
+        "detalle": "Camión para carga y mudanzas.",
+        "precio": "Desde ₡5.000"
+    },
+    {
+        "id": "T005",
+        "nombre": "Ana Rodríguez",
+        "cedula": "505550555",
+        "telefono": "8888-5555",
+        "servicio": "Ayuda",
+        "estado": "Disponible",
+        "detalle": "Apoyo en trámites, compras y asistencia.",
+        "precio": "Precio acordado"
+    },
+]
+
+# ======================================================
 # SESSION STATE
-# =====================================================
+# ======================================================
+
+if "trabajadores" not in st.session_state:
+    st.session_state.trabajadores = TRABAJADORES_BASE.copy()
+
+if "usuarios" not in st.session_state:
+    st.session_state.usuarios = []
 
 if "solicitudes" not in st.session_state:
     st.session_state.solicitudes = []
 
-if "cliente_marcado" not in st.session_state:
-    st.session_state.cliente_marcado = None
+if "chats" not in st.session_state:
+    st.session_state.chats = {}
 
-if "ruta_actual" not in st.session_state:
-    st.session_state.ruta_actual = None
+if "servicio_actual" not in st.session_state:
+    st.session_state.servicio_actual = None
 
-if "resultado_actual" not in st.session_state:
-    st.session_state.resultado_actual = None
+if "usuario_actual" not in st.session_state:
+    st.session_state.usuario_actual = None
 
-# =====================================================
+if "trabajador_actual" not in st.session_state:
+    st.session_state.trabajador_actual = None
+
+# ======================================================
 # FUNCIONES
-# =====================================================
+# ======================================================
 
-def calcular_tarifa(km, tarifa_base):
-    if km <= 2:
-        return tarifa_base
-    elif km <= 5:
-        return tarifa_base + 1000
-    elif km <= 10:
-        return tarifa_base + 2000
-    elif km <= 15:
-        return tarifa_base + 3500
-    else:
-        return tarifa_base + 5000
+def estado_html(estado):
+    if estado == "Disponible":
+        return '<span class="estado-disponible">🟢 Disponible</span>'
+    if estado == "Ocupado":
+        return '<span class="estado-ocupado">🔴 Ocupado</span>'
+    return '<span class="estado-fuera">⚫ Fuera de servicio</span>'
 
 
-def obtener_ruta_osrm(origen_lat, origen_lon, destino_lat, destino_lon):
-    url = (
-        "https://router.project-osrm.org/route/v1/driving/"
-        f"{origen_lon},{origen_lat};{destino_lon},{destino_lat}"
-        "?overview=full&geometries=polyline"
-    )
+def crear_solicitud(servicio, trabajador, cliente, detalle, lugar_compra, lugar_entrega):
+    solicitud_id = str(uuid.uuid4())[:8]
 
-    try:
-        respuesta = requests.get(url, timeout=15)
+    solicitud = {
+        "id": solicitud_id,
+        "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "servicio": servicio,
+        "trabajador_id": trabajador["id"],
+        "trabajador": trabajador["nombre"],
+        "telefono_trabajador": trabajador["telefono"],
+        "cliente": cliente,
+        "detalle": detalle,
+        "lugar_compra": lugar_compra,
+        "lugar_entrega": lugar_entrega,
+        "estado": "Pendiente"
+    }
 
-        if respuesta.status_code != 200:
-            return None
+    st.session_state.solicitudes.append(solicitud)
+    st.session_state.chats[solicitud_id] = []
 
-        data = respuesta.json()
-
-        if data.get("code") != "Ok":
-            return None
-
-        ruta = data["routes"][0]
-
-        distancia_km = ruta["distance"] / 1000
-        duracion_min = ruta["duration"] / 60
-        geometria = polyline.decode(ruta["geometry"])
-
-        return distancia_km, duracion_min, geometria
-
-    except Exception:
-        return None
+    return solicitud_id
 
 
-def crear_mapa(express_data, cliente=None, ruta=None):
-    mapa = folium.Map(
-        location=CENTRO_MAPA,
-        zoom_start=15,
-        tiles="CartoDB positron"
-    )
-
-    folium.Marker(
-        location=[express_data["lat"], express_data["lon"]],
-        popup="Salida del express",
-        tooltip="Salida del express",
-        icon=folium.Icon(color="red", icon="motorcycle", prefix="fa")
-    ).add_to(mapa)
-
-    if ruta:
-        folium.PolyLine(
-            locations=ruta,
-            color="#2563eb",
-            weight=8,
-            opacity=0.9,
-            tooltip="Ruta sugerida por calles"
-        ).add_to(mapa)
-
-    if cliente:
-        folium.Marker(
-            location=[cliente["lat"], cliente["lon"]],
-            popup="Destino del cliente",
-            tooltip="Destino del cliente",
-            icon=folium.Icon(color="blue", icon="user", prefix="fa")
-        ).add_to(mapa)
-
-    return mapa
+def cambiar_estado_trabajador(trabajador_id, nuevo_estado):
+    for t in st.session_state.trabajadores:
+        if t["id"] == trabajador_id:
+            t["estado"] = nuevo_estado
 
 
-def etiqueta_estado(estado):
-    if estado == "Pendiente":
-        return '<span class="estado-pendiente">⏳ Pendiente</span>'
-    elif estado == "Aceptado":
-        return '<span class="estado-aceptado">🛵 Aceptado</span>'
-    elif estado == "Realizado":
-        return '<span class="estado-realizado">✅ Realizado</span>'
-    return estado
-
-# =====================================================
+# ======================================================
 # SIDEBAR
-# =====================================================
+# ======================================================
 
 with st.sidebar:
-    st.title("🛵 Sistema Express")
-    st.write("Solicitud, aceptación y seguimiento del servicio.")
+    st.title("🚕 Plataforma Local")
+    st.write("Express, taxi, carga, camión y ayuda.")
 
     perfil = st.radio(
-        "Seleccione perfil",
-        ["Cliente", "Colaborador / Express"]
+        "Ingresar como:",
+        ["Inicio", "Usuario", "Trabajador", "Coordinador"]
     )
 
-# =====================================================
-# PERFIL CLIENTE
-# =====================================================
+# ======================================================
+# INICIO
+# ======================================================
 
-if perfil == "Cliente":
+if perfil == "Inicio":
+    st.title("🌈 Servicios Locales")
 
-    st.title("📍 Solicitar un express")
+    st.markdown("""
+    <div class="card">
+        <h3>Bienvenido</h3>
+        <p>Seleccione un servicio para ver información, trabajadores disponibles, precios y solicitar atención.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    col_form, col_map = st.columns([1, 2])
+    cols = st.columns(5)
 
-    with col_form:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+    for i, (servicio, data) in enumerate(SERVICIOS.items()):
+        with cols[i]:
+            st.markdown(f"""
+            <div class="card-color {data['clase']}">
+                <h2>{data['icono']} {servicio}</h2>
+                <p>{data['descripcion']}</p>
+                <p><b>{data['tarifas']}</b></p>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.subheader("Datos de la solicitud")
-
-        express_seleccionado = st.selectbox(
-            "Seleccione el express de salida",
-            list(EXPRESS.keys())
-        )
-
-        express_data = EXPRESS[express_seleccionado]
-
-        nombre_cliente = st.text_input("Nombre del cliente")
-        telefono = st.text_input("Teléfono")
-        detalle = st.text_area("Detalle del envío")
-
-        st.info(
-            "Marque en el mapa el destino del cliente. "
-            "El sistema calculará distancia, ruta y precio."
-        )
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col_map:
-        mapa = crear_mapa(
-            express_data=express_data,
-            cliente=st.session_state.cliente_marcado,
-            ruta=st.session_state.ruta_actual
-        )
-
-        resultado_mapa = st_folium(
-            mapa,
-            width=1200,
-            height=550,
-            returned_objects=["last_clicked"]
-        )
-
-        if resultado_mapa and resultado_mapa.get("last_clicked"):
-            st.session_state.cliente_marcado = {
-                "lat": resultado_mapa["last_clicked"]["lat"],
-                "lon": resultado_mapa["last_clicked"]["lng"]
-            }
-            st.session_state.ruta_actual = None
-            st.session_state.resultado_actual = None
-            st.rerun()
-
-    st.divider()
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.session_state.cliente_marcado:
-            st.success("📍 Destino marcado")
-        else:
-            st.warning("📍 Marque el destino")
-
-    with col2:
-        st.info(f"🛵 {express_seleccionado}")
-
-    with col3:
-        st.info("⏳ Solicitud sin enviar")
-
-    calcular = st.button("Calcular ruta y precio", use_container_width=True)
-
-    if calcular:
-        if not st.session_state.cliente_marcado:
-            st.error("Debe marcar el destino del cliente en el mapa.")
-        else:
-            cliente = st.session_state.cliente_marcado
-
-            ruta = obtener_ruta_osrm(
-                express_data["lat"],
-                express_data["lon"],
-                cliente["lat"],
-                cliente["lon"]
-            )
-
-            if ruta is None:
-                st.error("No se pudo calcular la ruta por calles.")
-            else:
-                distancia_km, duracion_min, geometria = ruta
-                tarifa = calcular_tarifa(distancia_km, express_data["base"])
-
-                st.session_state.ruta_actual = geometria
-                st.session_state.resultado_actual = {
-                    "distancia_km": distancia_km,
-                    "duracion_min": duracion_min,
-                    "tarifa": tarifa
-                }
-
+            if st.button(f"Información sobre {servicio}", key=f"info_{servicio}", use_container_width=True):
+                st.session_state.servicio_actual = servicio
                 st.rerun()
 
-    if st.session_state.resultado_actual:
-        resultado = st.session_state.resultado_actual
+    if st.session_state.servicio_actual:
+        servicio = st.session_state.servicio_actual
+        data = SERVICIOS[servicio]
 
-        col_a, col_b = st.columns(2)
+        st.subheader(f"{data['icono']} {servicio}")
 
-        with col_a:
-            st.markdown(f"""
-            <div class="card">
-                <h3>📋 Resumen del servicio</h3>
-                <p><b>Express:</b> <span class="rojo">{express_seleccionado}</span></p>
-                <p><b>Desde:</b> {express_data["direccion"]}</p>
-                <p><b>Hasta:</b> <span class="azul">Destino marcado por el cliente</span></p>
-                <p><b>Distancia:</b> {resultado["distancia_km"]:.2f} km</p>
-                <p><b>Tiempo estimado:</b> {resultado["duracion_min"]:.0f} minutos</p>
-                <p><b>Precio estimado:</b></p>
-                <p class="precio">₡{resultado["tarifa"]:,.0f}</p>
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="card">
+            <h3>Información sobre el servicio</h3>
+            <p>{data['descripcion']}</p>
+            <p><b>Precio por distancia:</b> {data['tarifas']}</p>
+            <p>Para solicitar este servicio, ingrese como <b>Usuario</b>.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with col_b:
-            st.markdown(f"""
-            <div class="card">
-                <h3>🧭 Ruta</h3>
-                <p><b>🔴 Rojo:</b> salida del express</p>
-                <p><b>🔵 Azul:</b> destino del cliente</p>
-                <p><b>🟦 Línea azul:</b> ruta sugerida por calles</p>
-                <p><b>Estado inicial:</b> {etiqueta_estado("Pendiente")}</p>
-            </div>
-            """, unsafe_allow_html=True)
+# ======================================================
+# USUARIO
+# ======================================================
 
-        enviar = st.button("Enviar solicitud al colaborador 🛵", use_container_width=True)
+elif perfil == "Usuario":
+    st.title("👤 Perfil de usuario")
 
-        if enviar:
-            nueva_solicitud = {
-                "id": str(uuid.uuid4())[:8],
-                "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                "cliente": nombre_cliente if nombre_cliente else "No indicado",
-                "telefono": telefono if telefono else "No indicado",
-                "detalle": detalle if detalle else "No indicado",
-                "express": express_seleccionado,
-                "direccion_salida": express_data["direccion"],
-                "origen_lat": express_data["lat"],
-                "origen_lon": express_data["lon"],
-                "destino_lat": st.session_state.cliente_marcado["lat"],
-                "destino_lon": st.session_state.cliente_marcado["lon"],
-                "distancia_km": resultado["distancia_km"],
-                "duracion_min": resultado["duracion_min"],
-                "tarifa": resultado["tarifa"],
-                "ruta": st.session_state.ruta_actual,
-                "estado": "Pendiente"
-            }
+    with st.expander("Registrar usuario", expanded=True):
+        col1, col2 = st.columns(2)
 
-            st.session_state.solicitudes.append(nueva_solicitud)
+        with col1:
+            nombre_usuario = st.text_input("Nombre completo del usuario")
+        with col2:
+            cedula_usuario = st.text_input("Número de cédula del usuario")
 
-            st.success("Solicitud enviada correctamente al colaborador.")
+        if st.button("Registrar usuario", use_container_width=True):
+            if not nombre_usuario or not cedula_usuario:
+                st.error("Debe completar nombre y cédula.")
+            else:
+                st.session_state.usuario_actual = {
+                    "nombre": nombre_usuario,
+                    "cedula": cedula_usuario
+                }
+                st.success("Usuario registrado correctamente.")
 
-            st.session_state.cliente_marcado = None
-            st.session_state.ruta_actual = None
-            st.session_state.resultado_actual = None
+    if st.session_state.usuario_actual:
+        st.markdown(f"""
+        <div class="card">
+            <h3>Usuario activo</h3>
+            <p><b>Nombre:</b> {st.session_state.usuario_actual['nombre']}</p>
+            <p><b>Cédula:</b> {st.session_state.usuario_actual['cedula']}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-# =====================================================
-# PERFIL COLABORADOR
-# =====================================================
+        servicio = st.selectbox("Seleccione el servicio", list(SERVICIOS.keys()))
 
-else:
+        data = SERVICIOS[servicio]
 
-    st.title("🛵 Panel del colaborador / express")
+        st.markdown(f"""
+        <div class="card-color {data['clase']}">
+            <h2>{data['icono']} {servicio}</h2>
+            <p>{data['descripcion']}</p>
+            <p><b>Precio:</b> {data['tarifas']}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    if not st.session_state.solicitudes:
-        st.info("No hay solicitudes registradas todavía.")
-    else:
-        filtro_estado = st.selectbox(
-            "Filtrar por estado",
-            ["Todas", "Pendiente", "Aceptado", "Realizado"]
-        )
-
-        solicitudes_filtradas = [
-            s for s in st.session_state.solicitudes
-            if filtro_estado == "Todas" or s["estado"] == filtro_estado
+        trabajadores_servicio = [
+            t for t in st.session_state.trabajadores
+            if t["servicio"] == servicio
         ]
 
-        for solicitud in solicitudes_filtradas:
+        st.subheader("Trabajadores disponibles")
+
+        for t in trabajadores_servicio:
             st.markdown(f"""
             <div class="card">
-                <h3>Solicitud #{solicitud["id"]}</h3>
-                <p><b>Fecha:</b> {solicitud["fecha"]}</p>
-                <p><b>Cliente:</b> {solicitud["cliente"]}</p>
-                <p><b>Teléfono:</b> {solicitud["telefono"]}</p>
-                <p><b>Detalle:</b> {solicitud["detalle"]}</p>
-                <p><b>Express:</b> <span class="rojo">{solicitud["express"]}</span></p>
-                <p><b>Desde:</b> {solicitud["direccion_salida"]}</p>
-                <p><b>Distancia:</b> {solicitud["distancia_km"]:.2f} km</p>
-                <p><b>Tiempo estimado:</b> {solicitud["duracion_min"]:.0f} minutos</p>
-                <p><b>Precio:</b> <span class="precio">₡{solicitud["tarifa"]:,.0f}</span></p>
-                <p><b>Estado:</b> {etiqueta_estado(solicitud["estado"])}</p>
+                <h3>{t['nombre']}</h3>
+                <p><b>Teléfono:</b> {t['telefono']}</p>
+                <p><b>Servicio:</b> {t['servicio']}</p>
+                <p><b>Detalle:</b> {t['detalle']}</p>
+                <p><b>Precio:</b> <span class="precio">{t['precio']}</span></p>
+                <p><b>Estado:</b> {estado_html(t['estado'])}</p>
             </div>
             """, unsafe_allow_html=True)
 
-            mapa_solicitud = crear_mapa(
-                express_data={
-                    "lat": solicitud["origen_lat"],
-                    "lon": solicitud["origen_lon"]
-                },
-                cliente={
-                    "lat": solicitud["destino_lat"],
-                    "lon": solicitud["destino_lon"]
-                },
-                ruta=solicitud["ruta"]
-            )
+            if t["estado"] == "Disponible":
+                with st.expander(f"Solicitar servicio a {t['nombre']}"):
+                    lugar_compra = st.text_input("¿Dónde debe comprar o recoger?", key=f"compra_{t['id']}")
+                    lugar_entrega = st.text_input("¿Dónde debe entregar o llegar?", key=f"entrega_{t['id']}")
+                    detalle = st.text_area("¿Qué necesita?", key=f"detalle_{t['id']}")
 
-            st_folium(
-                mapa_solicitud,
-                width=1200,
-                height=430
-            )
+                    if st.button(f"Enviar solicitud a {t['nombre']}", key=f"solicitar_{t['id']}", use_container_width=True):
+                        solicitud_id = crear_solicitud(
+                            servicio=servicio,
+                            trabajador=t,
+                            cliente=st.session_state.usuario_actual["nombre"],
+                            detalle=detalle,
+                            lugar_compra=lugar_compra,
+                            lugar_entrega=lugar_entrega
+                        )
+
+                        cambiar_estado_trabajador(t["id"], "Ocupado")
+
+                        st.success(f"Solicitud enviada. Código: {solicitud_id}")
+                        st.info("El trabajador fue marcado como ocupado hasta finalizar el servicio.")
+                        st.rerun()
+            else:
+                st.warning("Este trabajador no está disponible en este momento.")
+
+        st.subheader("Mis solicitudes y chat")
+
+        mis_solicitudes = [
+            s for s in st.session_state.solicitudes
+            if s["cliente"] == st.session_state.usuario_actual["nombre"]
+        ]
+
+        if not mis_solicitudes:
+            st.info("No tiene solicitudes registradas.")
+        else:
+            for s in mis_solicitudes:
+                st.markdown(f"""
+                <div class="card">
+                    <h3>Solicitud #{s['id']}</h3>
+                    <p><b>Servicio:</b> {s['servicio']}</p>
+                    <p><b>Trabajador:</b> {s['trabajador']}</p>
+                    <p><b>Estado:</b> {s['estado']}</p>
+                    <p><b>Comprar / recoger:</b> {s['lugar_compra']}</p>
+                    <p><b>Entregar / llegar:</b> {s['lugar_entrega']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.write("💬 Chat interno")
+
+                for msg in st.session_state.chats.get(s["id"], []):
+                    clase = "chat-user" if msg["de"] == "Usuario" else "chat-worker"
+                    st.markdown(f"""
+                    <div class="{clase}">
+                        <b>{msg['de']}:</b> {msg['texto']}<br>
+                        <small>{msg['hora']}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                texto = st.text_input("Escribir mensaje", key=f"msg_user_{s['id']}")
+
+                if st.button("Enviar mensaje", key=f"send_user_{s['id']}"):
+                    if texto:
+                        st.session_state.chats[s["id"]].append({
+                            "de": "Usuario",
+                            "texto": texto,
+                            "hora": datetime.now().strftime("%H:%M")
+                        })
+                        st.toast("Mensaje enviado al trabajador.")
+                        st.rerun()
+
+# ======================================================
+# TRABAJADOR
+# ======================================================
+
+elif perfil == "Trabajador":
+    st.title("🛠️ Perfil de trabajador")
+
+    with st.expander("Registrar trabajador", expanded=True):
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            nombre = st.text_input("Nombre completo")
+            cedula = st.text_input("Número de cédula")
+        with col2:
+            telefono = st.text_input("Teléfono")
+            servicio = st.selectbox("Servicio que brinda", list(SERVICIOS.keys()))
+        with col3:
+            codigo = st.text_input("Código de trabajador de 5 dígitos", type="password")
+            detalle = st.text_area("Descripción del servicio")
+
+        if st.button("Registrar como trabajador", use_container_width=True):
+            if codigo != CODIGO_TRABAJADOR:
+                st.error("Código incorrecto. Solo el coordinador puede autorizar trabajadores.")
+            elif not nombre or not cedula or not telefono:
+                st.error("Debe completar nombre, cédula y teléfono.")
+            else:
+                nuevo = {
+                    "id": str(uuid.uuid4())[:5],
+                    "nombre": nombre,
+                    "cedula": cedula,
+                    "telefono": telefono,
+                    "servicio": servicio,
+                    "estado": "Disponible",
+                    "detalle": detalle if detalle else "Servicio disponible.",
+                    "precio": SERVICIOS[servicio]["tarifas"]
+                }
+
+                st.session_state.trabajadores.append(nuevo)
+                st.session_state.trabajador_actual = nuevo
+                st.success("Trabajador registrado correctamente.")
+
+    trabajador_nombres = [t["nombre"] for t in st.session_state.trabajadores]
+
+    nombre_login = st.selectbox("Ingresar como trabajador registrado", trabajador_nombres)
+
+    trabajador = next(
+        t for t in st.session_state.trabajadores
+        if t["nombre"] == nombre_login
+    )
+
+    st.session_state.trabajador_actual = trabajador
+
+    st.markdown(f"""
+    <div class="card">
+        <h3>{trabajador['nombre']}</h3>
+        <p><b>Servicio:</b> {trabajador['servicio']}</p>
+        <p><b>Teléfono:</b> {trabajador['telefono']}</p>
+        <p><b>Estado actual:</b> {estado_html(trabajador['estado'])}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    nuevo_estado = st.selectbox(
+        "Cambiar estado",
+        ["Disponible", "Ocupado", "Fuera de servicio"],
+        index=["Disponible", "Ocupado", "Fuera de servicio"].index(trabajador["estado"])
+    )
+
+    if st.button("Actualizar estado", use_container_width=True):
+        cambiar_estado_trabajador(trabajador["id"], nuevo_estado)
+        st.success("Estado actualizado.")
+        st.rerun()
+
+    st.subheader("Solicitudes asignadas")
+
+    solicitudes_trabajador = [
+        s for s in st.session_state.solicitudes
+        if s["trabajador_id"] == trabajador["id"]
+    ]
+
+    if not solicitudes_trabajador:
+        st.info("No tiene solicitudes asignadas.")
+    else:
+        for s in solicitudes_trabajador:
+            st.markdown(f"""
+            <div class="card">
+                <h3>Solicitud #{s['id']}</h3>
+                <p><b>Cliente:</b> {s['cliente']}</p>
+                <p><b>Servicio:</b> {s['servicio']}</p>
+                <p><b>Estado:</b> {s['estado']}</p>
+                <p><b>Comprar / recoger:</b> {s['lugar_compra']}</p>
+                <p><b>Entregar / llegar:</b> {s['lugar_entrega']}</p>
+                <p><b>Detalle:</b> {s['detalle']}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                if st.button(
-                    f"Aceptar solicitud #{solicitud['id']} 🛵",
-                    key=f"aceptar_{solicitud['id']}",
-                    use_container_width=True
-                ):
-                    solicitud["estado"] = "Aceptado"
+                if st.button(f"Aceptar #{s['id']}", key=f"aceptar_{s['id']}", use_container_width=True):
+                    s["estado"] = "Aceptado"
+                    cambiar_estado_trabajador(trabajador["id"], "Ocupado")
+                    st.toast("Solicitud aceptada.")
                     st.rerun()
 
             with col2:
-                if st.button(
-                    f"Dejar pendiente #{solicitud['id']} ⏳",
-                    key=f"pendiente_{solicitud['id']}",
-                    use_container_width=True
-                ):
-                    solicitud["estado"] = "Pendiente"
+                if st.button(f"Pendiente #{s['id']}", key=f"pendiente_{s['id']}", use_container_width=True):
+                    s["estado"] = "Pendiente"
+                    st.toast("Solicitud pendiente.")
                     st.rerun()
 
             with col3:
-                if st.button(
-                    f"Marcar realizado #{solicitud['id']} ✅",
-                    key=f"realizado_{solicitud['id']}",
-                    use_container_width=True
-                ):
-                    solicitud["estado"] = "Realizado"
+                if st.button(f"Finalizar #{s['id']}", key=f"finalizar_{s['id']}", use_container_width=True):
+                    s["estado"] = "Finalizado"
+                    cambiar_estado_trabajador(trabajador["id"], "Disponible")
+                    st.toast("Servicio finalizado. Trabajador disponible.")
+                    st.rerun()
+
+            st.write("💬 Chat con el cliente")
+
+            for msg in st.session_state.chats.get(s["id"], []):
+                clase = "chat-worker" if msg["de"] == "Trabajador" else "chat-user"
+                st.markdown(f"""
+                <div class="{clase}">
+                    <b>{msg['de']}:</b> {msg['texto']}<br>
+                    <small>{msg['hora']}</small>
+                </div>
+                """, unsafe_allow_html=True)
+
+            texto = st.text_input("Responder mensaje", key=f"msg_worker_{s['id']}")
+
+            if st.button("Enviar respuesta", key=f"send_worker_{s['id']}"):
+                if texto:
+                    st.session_state.chats[s["id"]].append({
+                        "de": "Trabajador",
+                        "texto": texto,
+                        "hora": datetime.now().strftime("%H:%M")
+                    })
+                    st.toast("Mensaje enviado al usuario.")
                     st.rerun()
 
             st.divider()
+
+# ======================================================
+# COORDINADOR
+# ======================================================
+
+elif perfil == "Coordinador":
+    st.title("📊 Panel del coordinador")
+
+    st.markdown("""
+    <div class="card">
+        <h3>Código actual para registrar trabajadores</h3>
+        <p class="precio">12345</p>
+        <p>Este código se puede cambiar luego cuando conectemos base de datos.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("Trabajadores registrados")
+
+    for t in st.session_state.trabajadores:
+        st.markdown(f"""
+        <div class="card">
+            <h3>{t['nombre']}</h3>
+            <p><b>Cédula:</b> {t['cedula']}</p>
+            <p><b>Teléfono:</b> {t['telefono']}</p>
+            <p><b>Servicio:</b> {t['servicio']}</p>
+            <p><b>Estado:</b> {estado_html(t['estado'])}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.subheader("Solicitudes")
+
+    if not st.session_state.solicitudes:
+        st.info("No hay solicitudes todavía.")
+    else:
+        for s in st.session_state.solicitudes:
+            st.markdown(f"""
+            <div class="card">
+                <h3>Solicitud #{s['id']}</h3>
+                <p><b>Fecha:</b> {s['fecha']}</p>
+                <p><b>Cliente:</b> {s['cliente']}</p>
+                <p><b>Trabajador:</b> {s['trabajador']}</p>
+                <p><b>Servicio:</b> {s['servicio']}</p>
+                <p><b>Estado:</b> {s['estado']}</p>
+            </div>
+            """, unsafe_allow_html=True)
