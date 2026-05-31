@@ -1,753 +1,1107 @@
 import streamlit as st
-import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-from urllib.parse import quote
 import uuid
-import time
-import random
+import re
+from urllib.parse import quote
 
 # =========================================================
-# APP EXPRESS - DEMO CON GOOGLE SHEETS
-# Base: https://docs.google.com/spreadsheets/d/1LSnqaX5qDsw1Tq-qdknohQPr6XX09JnqAM0-4CiqC0E/edit
-# Hojas usadas/creadas:
-# - Usuarios
-# - Colaboradores
-# - Solicitudes
+# CONFIGURACIÓN GENERAL
 # =========================================================
 
 st.set_page_config(
     page_title="Express Local",
     page_icon="🛵",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-SPREADSHEET_ID = "1LSnqaX5qDsw1Tq-qdknohQPr6XX09JnqAM0-4CiqC0E"
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1LSnqaX5qDsw1Tq-qdknohQPr6XX09JnqAM0-4CiqC0E/edit?gid=0#gid=0"
+
+HOJA_USUARIOS = "Usuarios"
+HOJA_COLABORADORES = "Datos generales"
+HOJA_SOLICITUDES = "Solicitudes"
+
 ADMIN_WHATSAPP = "50663009645"
 
-CLAVES_COLABORADOR = {
-    "Taxi": ["TAXI-101", "TAXI-202", "TAXI-303", "TAXI-404", "TAXI-505", "TAXI-606"],
-    "Express": ["EXP-101", "EXP-202", "EXP-303", "EXP-404", "EXP-505", "EXP-606"],
-    "Carga": ["CAR-101", "CAR-202", "CAR-303", "CAR-404", "CAR-505", "CAR-606"],
-    "Camión": ["CAM-101", "CAM-202", "CAM-303", "CAM-404", "CAM-505", "CAM-606"],
-}
+LIMITE_USUARIOS_DEMO = 6
+LIMITE_COLABORADORES_POR_SERVICIO = 5
 
 SERVICIOS = {
     "Taxi": {
         "icono": "🚕",
-        "clase": "taxi",
-        "titulo": "Taxi local",
-        "descripcion": "Viajes dentro y fuera de la comunidad, traslados rápidos y servicios programados.",
-        "color": "#f59e0b",
-        "frase": "Solicite un taxi disponible y coordine el viaje por WhatsApp.",
+        "color1": "#facc15",
+        "color2": "#f97316",
+        "descripcion": "Viajes locales, traslados rápidos y servicio puerta a puerta.",
+        "mensaje": "Hola, necesito ayuda para solicitar un taxi."
     },
     "Express": {
         "icono": "🛵",
-        "clase": "express",
-        "titulo": "Express",
-        "descripcion": "Mandados, compras, documentos, comida, entregas pequeñas y servicios rápidos.",
-        "color": "#ef4444",
-        "frase": "Pida su express y conecte con el colaborador disponible.",
+        "color1": "#ef4444",
+        "color2": "#fb7185",
+        "descripcion": "Mandados, compras, documentos y entregas rápidas.",
+        "mensaje": "Hola, necesito ayuda para solicitar un express."
     },
     "Carga": {
         "icono": "📦",
-        "clase": "carga",
-        "titulo": "Carga liviana",
-        "descripcion": "Traslado de paquetes medianos, compras grandes, artículos y entregas especiales.",
-        "color": "#2563eb",
-        "frase": "Coordine carga liviana con personas disponibles en su zona.",
+        "color1": "#2563eb",
+        "color2": "#06b6d4",
+        "descripcion": "Traslado de paquetes, compras grandes o artículos medianos.",
+        "mensaje": "Hola, necesito ayuda para solicitar servicio de carga."
     },
     "Camión": {
         "icono": "🚚",
-        "clase": "camion",
-        "titulo": "Camión",
-        "descripcion": "Mudanzas, materiales, carga pesada y transporte especial según disponibilidad.",
-        "color": "#16a34a",
-        "frase": "Busque camión disponible y coordine detalles directamente.",
-    },
+        "color1": "#16a34a",
+        "color2": "#22c55e",
+        "descripcion": "Mudanzas, materiales, carga pesada o transporte especial.",
+        "mensaje": "Hola, necesito ayuda para solicitar un camión."
+    }
 }
 
-PROMOCIONES = [
-    {"titulo": "Promo restaurante", "texto": "Espacio listo para imagen de promoción 1", "emoji": "🍔", "color": "#ef4444"},
-    {"titulo": "Servicio destacado", "texto": "Espacio listo para imagen de promoción 2", "emoji": "🛵", "color": "#f97316"},
-    {"titulo": "Oferta local", "texto": "Espacio listo para imagen de promoción 3", "emoji": "🥤", "color": "#22c55e"},
-    {"titulo": "Comercio aliado", "texto": "Espacio listo para imagen de promoción 4", "emoji": "🛒", "color": "#2563eb"},
+CLAVES_COLABORADOR = {
+    "Taxi": ["TAXI01", "TAXI02", "TAXI03", "TAXI04", "TAXI05", "TAXI06"],
+    "Express": ["EXP01", "EXP02", "EXP03", "EXP04", "EXP05", "EXP06"],
+    "Carga": ["CARGA01", "CARGA02", "CARGA03", "CARGA04", "CARGA05", "CARGA06"],
+    "Camión": ["CAMION01", "CAMION02", "CAMION03", "CAMION04", "CAMION05", "CAMION06"],
+}
+
+ENCABEZADOS_USUARIOS = [
+    "ID", "Nombre", "Primer apellido", "Segundo apellido",
+    "Teléfono", "Usuario", "Clave", "Tipo", "Fecha"
 ]
 
-USUARIOS_DEMO = [
-    ["U001", "Ana", "Mora", "Solís", "87001111", "anamora", "1234", "Usuario", fecha_actual := datetime.now().strftime("%d/%m/%Y %H:%M")],
-    ["U002", "Luis", "Castro", "Vega", "87002222", "luiscastro", "1234", "Usuario", fecha_actual],
-    ["U003", "María", "Rojas", "López", "87003333", "mariarojas", "1234", "Usuario", fecha_actual],
-    ["U004", "José", "Vargas", "Arias", "87004444", "josevargas", "1234", "Usuario", fecha_actual],
-    ["U005", "Daniela", "Campos", "Ruiz", "87005555", "danicampos", "1234", "Usuario", fecha_actual],
-    ["U006", "Carlos", "Ramírez", "Soto", "87006666", "carlosramirez", "1234", "Usuario", fecha_actual],
+ENCABEZADOS_COLABORADORES = [
+    "ID", "Nombre", "Primer apellido", "Segundo apellido",
+    "Teléfono", "Usuario", "Clave", "Tipo", "Servicio", "Estado", "Fecha"
 ]
 
-COLABORADORES_DEMO = []
-for servicio, prefijo in [("Taxi", "TAX"), ("Express", "EXP"), ("Carga", "CAR"), ("Camión", "CAM")]:
-    for i in range(1, 6):
-        COLABORADORES_DEMO.append([
-            f"{prefijo}{i:03d}",
-            f"Colaborador {servicio} {i}",
-            "Demo",
-            "Local",
-            f"8800{len(COLABORADORES_DEMO)+1:04d}",
-            f"{servicio.lower()}{i}",
-            "1234",
-            servicio,
-            "Disponible" if i <= 3 else "Fuera de servicio",
-            fecha_actual,
-        ])
+ENCABEZADOS_SOLICITUDES = [
+    "ID", "Fecha", "Servicio", "Cliente ID", "Cliente",
+    "Teléfono cliente", "Detalle", "Estado", "Colaborador ID",
+    "Colaborador", "Teléfono colaborador"
+]
 
-CSS = """
+# =========================================================
+# ESTILO VISUAL
+# =========================================================
+
+st.markdown("""
 <style>
-:root, html, body, .stApp { color-scheme: light !important; background: #fff7ed !important; }
-.block-container { padding-top: 1.2rem !important; padding-bottom: 2rem !important; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #111827 0%, #1f2937 50%, #7c2d12 100%) !important; }
-[data-testid="stSidebar"] * { color: white !important; }
-[data-testid="stHeader"] { background: rgba(255, 247, 237, 0.78) !important; }
-h1, h2, h3, h4, p, label, span, div { color: #111827; }
-.stTextInput input, .stPassword input, .stSelectbox div[data-baseweb="select"] > div, textarea {
-    border-radius: 16px !important; border: 1px solid #fed7aa !important; background: white !important;
+:root, html, body, .stApp {
+    background: linear-gradient(135deg, #fff7ed 0%, #fef2f2 45%, #eff6ff 100%) !important;
+    color: #111827 !important;
 }
-.stButton > button, .stFormSubmitButton > button {
-    width: 100%; min-height: 46px; border-radius: 16px; border: 0; font-weight: 900;
-    background: linear-gradient(135deg, #f97316, #ef4444); color: white !important;
-    box-shadow: 0 10px 22px rgba(239, 68, 68, .18);
+
+[data-testid="stHeader"] {
+    background: rgba(255,255,255,0.15) !important;
 }
-.stButton > button:hover, .stFormSubmitButton > button:hover { filter: brightness(.95); color: white !important; }
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #111827 0%, #1f2937 55%, #312e81 100%) !important;
+}
+
+[data-testid="stSidebar"] * {
+    color: #ffffff !important;
+}
+
+h1, h2, h3, h4, p, label, span, div {
+    color: #111827;
+}
+
+input, textarea, select {
+    border-radius: 16px !important;
+}
+
+.stTextInput input,
+.stTextArea textarea,
+.stSelectbox div[data-baseweb="select"] > div {
+    background: #ffffff !important;
+    border: 1px solid #fed7aa !important;
+}
+
+.stButton > button,
+.stFormSubmitButton > button {
+    border-radius: 18px !important;
+    border: none !important;
+    font-weight: 900 !important;
+    min-height: 48px !important;
+    background: linear-gradient(135deg, #fb923c, #ef4444) !important;
+    color: #111827 !important;
+    box-shadow: 0 10px 20px rgba(239, 68, 68, 0.20) !important;
+}
+
+.stButton > button:hover,
+.stFormSubmitButton > button:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.98);
+}
+
 .stLinkButton > a {
-    width: 100%; min-height: 46px; border-radius: 16px; border: 0; font-weight: 900;
-    background: linear-gradient(135deg, #22c55e, #16a34a) !important; color: white !important;
-    display: flex; align-items: center; justify-content: center;
+    border-radius: 18px !important;
+    border: none !important;
+    font-weight: 900 !important;
+    min-height: 48px !important;
+    background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+    color: #ffffff !important;
+    text-align: center !important;
 }
+
 .hero {
-    border-radius: 32px; padding: 34px; margin-bottom: 18px;
-    background: radial-gradient(circle at top left, #fde68a, transparent 30%), linear-gradient(135deg, #f97316, #ef4444 55%, #7c3aed);
-    color: white !important; box-shadow: 0 20px 40px rgba(124,45,18,.25);
+    padding: 34px;
+    border-radius: 32px;
+    background: linear-gradient(135deg, #ffedd5, #fecaca, #dbeafe);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.10);
+    margin-bottom: 24px;
 }
-.hero * { color: white !important; }
-.hero h1 { font-size: 48px; line-height: 1; margin: 0 0 12px 0; font-weight: 1000; }
-.hero p { font-size: 19px; margin: 0; opacity: .96; }
+
+.hero h1 {
+    font-size: 48px;
+    margin: 0;
+    font-weight: 950;
+}
+
+.hero p {
+    font-size: 18px;
+    margin-top: 8px;
+    color: #374151;
+}
+
 .card {
-    background: rgba(255,255,255,.95); border: 1px solid #ffedd5; border-radius: 26px;
-    padding: 24px; box-shadow: 0 14px 28px rgba(124,45,18,.08); margin-bottom: 16px;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(251, 146, 60, 0.25);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+    border-radius: 28px;
+    padding: 24px;
+    margin-bottom: 18px;
 }
-.login-card { min-height: 245px; }
-.badge { display: inline-block; padding: 8px 13px; border-radius: 999px; font-weight: 900; font-size: 13px; }
-.ok { background: #dcfce7; color: #166534 !important; }
-.warn { background: #fef3c7; color: #92400e !important; }
-.danger { background: #fee2e2; color: #991b1b !important; }
-.gray { background: #e5e7eb; color: #374151 !important; }
-.blue { background: #dbeafe; color: #1d4ed8 !important; }
+
+.login-card {
+    min-height: 210px;
+    border-radius: 30px;
+    padding: 26px;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid rgba(251, 146, 60, 0.25);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+}
+
 .service-card {
-    border-radius: 28px; padding: 25px; min-height: 210px; color: white !important;
-    box-shadow: 0 18px 34px rgba(17,24,39,.16); transition: all .18s ease; margin-bottom: 8px;
+    border-radius: 30px;
+    padding: 28px 22px;
+    min-height: 205px;
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
+    transition: all .2s ease;
 }
-.service-card:hover { transform: translateY(-3px); }
-.service-card * { color: white !important; }
-.service-card h2 { font-size: 34px; margin: 0 0 8px 0; font-weight: 1000; }
-.taxi { background: linear-gradient(135deg, #f59e0b, #facc15); }
-.express { background: linear-gradient(135deg, #ef4444, #f97316); }
-.carga { background: linear-gradient(135deg, #2563eb, #06b6d4); }
-.camion { background: linear-gradient(135deg, #16a34a, #84cc16); }
-.promo {
-    border-radius: 30px; padding: 28px; min-height: 185px; display: flex; align-items: center;
-    justify-content: space-between; color: white !important; box-shadow: 0 20px 38px rgba(17,24,39,.14);
+
+.service-card:hover {
+    transform: translateY(-4px);
 }
-.promo * { color: white !important; }
-.promo-emoji { font-size: 82px; line-height: 1; }
-.worker-row { border-left: 8px solid #f97316; }
-.whatsapp-box { background: #052e16; border-radius: 22px; padding: 20px; margin-top: 12px; }
-.whatsapp-box * { color: white !important; }
-.small-muted { color: #6b7280 !important; font-size: 14px; }
-@media(max-width: 768px) { .hero h1 { font-size: 34px; } .service-card { min-height: 165px; } }
+
+.service-card h2 {
+    color: #ffffff !important;
+    font-size: 32px;
+    margin: 0 0 10px 0;
+    font-weight: 950;
+}
+
+.service-card p {
+    color: #fff7ed !important;
+    font-size: 15px;
+    line-height: 1.35;
+}
+
+.promo-carousel {
+    height: 170px;
+    border-radius: 32px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.15);
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, #fb7185, #f97316, #22c55e, #06b6d4);
+    background-size: 400% 400%;
+    animation: gradientMove 4s ease infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.promo-carousel h2 {
+    color: #ffffff !important;
+    font-size: 34px;
+    font-weight: 950;
+    margin: 0;
+}
+
+.promo-carousel p {
+    color: #fff7ed !important;
+    font-size: 17px;
+    margin-top: 8px;
+}
+
+@keyframes gradientMove {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+}
+
+.badge {
+    display: inline-block;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: 14px;
+}
+
+.disponible { background: #dcfce7; color: #166534 !important; }
+.ocupado { background: #fee2e2; color: #991b1b !important; }
+.fuera { background: #e5e7eb; color: #374151 !important; }
+.pendiente { background: #fef3c7; color: #92400e !important; }
+.aceptado { background: #dbeafe; color: #1d4ed8 !important; }
+.finalizado { background: #dcfce7; color: #166534 !important; }
+
+.small-note {
+    color: #6b7280 !important;
+    font-size: 14px;
+}
+
+@media(max-width: 768px) {
+    .hero h1 { font-size: 34px; }
+    .promo-carousel h2 { font-size: 25px; }
+}
 </style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # =========================================================
 # CONEXIÓN GOOGLE SHEETS
 # =========================================================
 
-def normalizar_usuario(valor: str) -> str:
-    return str(valor or "").strip().lower().replace(" ", "")
-
-
-def limpiar_telefono(valor: str) -> str:
-    tel = "".join([c for c in str(valor or "") if c.isdigit()])
-    if tel.startswith("506"):
-        return tel
-    return f"506{tel}" if tel else ""
-
-
-def whatsapp_link(numero: str, mensaje: str) -> str:
-    numero_limpio = limpiar_telefono(numero)
-    return f"https://wa.me/{numero_limpio}?text={quote(mensaje)}"
-
-
-def obtener_credenciales():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    if "gcp_service_account" not in st.secrets:
-        st.error("Falta configurar st.secrets['gcp_service_account'] con las credenciales de Google Sheets.")
-        st.stop()
-    return Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
-
-
 @st.cache_resource(show_spinner=False)
 def conectar_google_sheets():
-    creds = obtener_credenciales()
-    client = gspread.authorize(creds)
-    return client.open_by_key(SPREADSHEET_ID)
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    if "gcp_service_account" in st.secrets:
+        info = dict(st.secrets["gcp_service_account"])
+    else:
+        info = dict(st.secrets)
+
+    creds = Credentials.from_service_account_info(info, scopes=scopes)
+    cliente = gspread.authorize(creds)
+    return cliente.open_by_url(SPREADSHEET_URL)
 
 
-def obtener_hoja(nombre: str, encabezados: list[str]):
+def obtener_hoja(nombre, encabezados):
     libro = conectar_google_sheets()
+
     try:
         hoja = libro.worksheet(nombre)
     except gspread.WorksheetNotFound:
-        hoja = libro.add_worksheet(title=nombre, rows=1000, cols=max(20, len(encabezados)))
+        hoja = libro.add_worksheet(title=nombre, rows=200, cols=len(encabezados) + 3)
+
     valores = hoja.get_all_values()
     if not valores:
         hoja.append_row(encabezados)
-    elif valores[0] != encabezados:
-        # Si la hoja existe pero no tiene encabezados correctos, no borra datos: solo muestra advertencia.
-        pass
+    else:
+        primera = valores[0]
+        if primera[:len(encabezados)] != encabezados:
+            hoja.clear()
+            hoja.append_row(encabezados)
+
     return hoja
 
 
-HEADERS_USUARIOS = ["id", "nombre", "primer_apellido", "segundo_apellido", "telefono", "usuario", "clave", "tipo", "fecha_registro"]
-HEADERS_COLABORADORES = ["id", "nombre", "primer_apellido", "segundo_apellido", "telefono", "usuario", "clave", "servicio", "estado", "fecha_registro"]
-HEADERS_SOLICITUDES = [
-    "id", "fecha", "servicio", "usuario_cliente", "cliente_nombre", "telefono_cliente", "colaborador_id",
-    "colaborador_nombre", "telefono_colaborador", "estado", "detalle", "origen", "destino", "aceptado_fecha"
-]
-
-
-def cargar_df(nombre: str, encabezados: list[str]) -> pd.DataFrame:
+def leer_registros(nombre, encabezados):
     hoja = obtener_hoja(nombre, encabezados)
-    data = hoja.get_all_records()
-    df = pd.DataFrame(data)
-    for col in encabezados:
-        if col not in df.columns:
-            df[col] = ""
-    return df[encabezados]
+    filas = hoja.get_all_values()
+
+    if len(filas) <= 1:
+        return []
+
+    registros = []
+    for i, fila in enumerate(filas[1:], start=2):
+        fila_completa = fila + [""] * (len(encabezados) - len(fila))
+        registro = dict(zip(encabezados, fila_completa[:len(encabezados)]))
+        registro["_fila"] = i
+        registros.append(registro)
+
+    return registros
 
 
-def append_row(nombre: str, encabezados: list[str], row: list):
+def agregar_registro(nombre, encabezados, datos):
     hoja = obtener_hoja(nombre, encabezados)
-    hoja.append_row(row, value_input_option="USER_ENTERED")
+    fila = [datos.get(campo, "") for campo in encabezados]
+    hoja.append_row(fila, value_input_option="USER_ENTERED")
 
 
-def actualizar_celda_por_id(nombre: str, encabezados: list[str], id_registro: str, columna: str, valor: str):
+def actualizar_celda(nombre, encabezados, fila, columna, valor):
     hoja = obtener_hoja(nombre, encabezados)
-    valores = hoja.get_all_values()
-    if not valores:
-        return False
-    header = valores[0]
-    if columna not in header:
-        return False
-    col_idx = header.index(columna) + 1
-    for i, fila in enumerate(valores[1:], start=2):
-        if fila and fila[0] == id_registro:
-            hoja.update_cell(i, col_idx, valor)
+    indice_columna = encabezados.index(columna) + 1
+    hoja.update_cell(fila, indice_columna, valor)
+
+
+def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
+    hoja = obtener_hoja(nombre, encabezados)
+    for columna, valor in cambios.items():
+        indice_columna = encabezados.index(columna) + 1
+        hoja.update_cell(fila, indice_columna, valor)
+
+# =========================================================
+# FUNCIONES AUXILIARES
+# =========================================================
+
+def normalizar_usuario(texto):
+    return str(texto).strip().lower()
+
+
+def limpiar_texto(texto):
+    return str(texto).strip()
+
+
+def limpiar_telefono(texto):
+    return re.sub(r"[^0-9]", "", str(texto))
+
+
+def telefono_whatsapp_cr(texto):
+    numero = limpiar_telefono(texto)
+    if numero.startswith("506"):
+        return numero
+    return "506" + numero
+
+
+def link_whatsapp(numero, mensaje):
+    return f"https://wa.me/{telefono_whatsapp_cr(numero)}?text={quote(mensaje)}"
+
+
+def usuario_existe(nombre_usuario):
+    usuario_n = normalizar_usuario(nombre_usuario)
+    usuarios = leer_registros(HOJA_USUARIOS, ENCABEZADOS_USUARIOS)
+    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
+
+    for u in usuarios:
+        if normalizar_usuario(u["Usuario"]) == usuario_n:
             return True
+
+    for c in colaboradores:
+        if normalizar_usuario(c["Usuario"]) == usuario_n:
+            return True
+
     return False
 
 
-def actualizar_varias_celdas_por_id(nombre: str, encabezados: list[str], id_registro: str, cambios: dict):
-    hoja = obtener_hoja(nombre, encabezados)
-    valores = hoja.get_all_values()
-    if not valores:
-        return False
-    header = valores[0]
-    fila_idx = None
-    for i, fila in enumerate(valores[1:], start=2):
-        if fila and fila[0] == id_registro:
-            fila_idx = i
-            break
-    if fila_idx is None:
-        return False
-    for columna, valor in cambios.items():
-        if columna in header:
-            hoja.update_cell(fila_idx, header.index(columna) + 1, valor)
-    return True
+def badge_estado(estado):
+    estado_l = str(estado).strip().lower()
+    if estado_l == "disponible":
+        return '<span class="badge disponible">🟢 Disponible</span>'
+    if estado_l == "ocupado":
+        return '<span class="badge ocupado">🔴 Ocupado</span>'
+    if estado_l == "fuera de servicio":
+        return '<span class="badge fuera">⚫ Fuera de servicio</span>'
+    if estado_l == "pendiente":
+        return '<span class="badge pendiente">⏳ Pendiente</span>'
+    if estado_l == "aceptado":
+        return '<span class="badge aceptado">✅ Aceptado</span>'
+    if estado_l == "finalizado":
+        return '<span class="badge finalizado">🏁 Finalizado</span>'
+    return f'<span class="badge fuera">{estado}</span>'
 
 
-def sembrar_datos_demo():
-    df_u = cargar_df("Usuarios", HEADERS_USUARIOS)
-    df_c = cargar_df("Colaboradores", HEADERS_COLABORADORES)
-    if df_u.empty:
-        hoja_u = obtener_hoja("Usuarios", HEADERS_USUARIOS)
-        hoja_u.append_rows(USUARIOS_DEMO, value_input_option="USER_ENTERED")
-    if df_c.empty:
-        hoja_c = obtener_hoja("Colaboradores", HEADERS_COLABORADORES)
-        hoja_c.append_rows(COLABORADORES_DEMO, value_input_option="USER_ENTERED")
+def inicializar_estado():
+    valores = {
+        "pagina": "login",
+        "tipo": None,
+        "usuario_actual": None,
+        "colaborador_actual": None,
+        "servicio_seleccionado": None,
+    }
 
-
-try:
-    sembrar_datos_demo()
-except Exception as e:
-    st.error(f"No se pudo conectar o preparar la base de datos: {e}")
-    st.stop()
-
-# =========================================================
-# ESTADO DE SESIÓN
-# =========================================================
-
-for key, default in {
-    "autenticado": False,
-    "rol": None,
-    "perfil": {},
-    "pagina": "login",
-    "servicio_seleccionado": None,
-    "promo_index": 0,
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
+    for clave, valor in valores.items():
+        if clave not in st.session_state:
+            st.session_state[clave] = valor
 
 
 def cerrar_sesion():
-    st.session_state.autenticado = False
-    st.session_state.rol = None
-    st.session_state.perfil = {}
     st.session_state.pagina = "login"
+    st.session_state.tipo = None
+    st.session_state.usuario_actual = None
+    st.session_state.colaborador_actual = None
     st.session_state.servicio_seleccionado = None
 
 
-def nombre_completo(row) -> str:
-    return f"{row.get('nombre','')} {row.get('primer_apellido','')} {row.get('segundo_apellido','')}".strip()
+def total_usuarios_registrados():
+    return len(leer_registros(HOJA_USUARIOS, ENCABEZADOS_USUARIOS))
 
 
-def estado_badge(estado: str) -> str:
-    estado = str(estado or "").strip()
-    if estado == "Disponible":
-        return '<span class="badge ok">🟢 Disponible</span>'
-    if estado == "Ocupado":
-        return '<span class="badge danger">🔴 Ocupado</span>'
-    if estado == "Fuera de servicio":
-        return '<span class="badge gray">⚫ Fuera de servicio</span>'
-    if estado == "Pendiente":
-        return '<span class="badge warn">⏳ Pendiente</span>'
-    if estado == "Aceptado":
-        return '<span class="badge blue">✅ Aceptado</span>'
-    if estado == "Finalizado":
-        return '<span class="badge ok">🏁 Finalizado</span>'
-    if estado == "Cancelado":
-        return '<span class="badge danger">❌ Cancelado</span>'
-    return f'<span class="badge gray">{estado}</span>'
+def total_colaboradores_servicio(servicio):
+    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
+    return sum(1 for c in colaboradores if c["Servicio"] == servicio)
 
 
-def hero(titulo, texto, icono="🛵"):
-    st.markdown(f"""
+def buscar_usuario_login(nombre_usuario, clave):
+    usuario_n = normalizar_usuario(nombre_usuario)
+    clave_limpia = limpiar_texto(clave)
+
+    usuarios = leer_registros(HOJA_USUARIOS, ENCABEZADOS_USUARIOS)
+
+    for u in usuarios:
+        # El usuario NO distingue mayúsculas/minúsculas.
+        # La clave SÍ acepta números, mayúsculas y minúsculas, y se compara exactamente.
+        if normalizar_usuario(u["Usuario"]) == usuario_n and limpiar_texto(u["Clave"]) == clave_limpia:
+            return u
+
+    return None
+
+
+def buscar_colaborador_login(nombre_usuario, clave):
+    usuario_n = normalizar_usuario(nombre_usuario)
+    clave_limpia = limpiar_texto(clave)
+
+    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
+
+    for c in colaboradores:
+        if normalizar_usuario(c["Usuario"]) == usuario_n and limpiar_texto(c["Clave"]) == clave_limpia:
+            return c
+
+    return None
+
+
+def registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave):
+    datos = {
+        "ID": str(uuid.uuid4())[:8],
+        "Nombre": limpiar_texto(nombre),
+        "Primer apellido": limpiar_texto(apellido1),
+        "Segundo apellido": limpiar_texto(apellido2),
+        "Teléfono": telefono_whatsapp_cr(telefono),
+        "Usuario": normalizar_usuario(usuario),
+        "Clave": limpiar_texto(clave),
+        "Tipo": "Usuario",
+        "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M")
+    }
+    agregar_registro(HOJA_USUARIOS, ENCABEZADOS_USUARIOS, datos)
+    return datos
+
+
+def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave, servicio):
+    datos = {
+        "ID": str(uuid.uuid4())[:8],
+        "Nombre": limpiar_texto(nombre),
+        "Primer apellido": limpiar_texto(apellido1),
+        "Segundo apellido": limpiar_texto(apellido2),
+        "Teléfono": telefono_whatsapp_cr(telefono),
+        "Usuario": normalizar_usuario(usuario),
+        "Clave": limpiar_texto(clave),
+        "Tipo": "Colaborador",
+        "Servicio": servicio,
+        "Estado": "Disponible",
+        "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M")
+    }
+    agregar_registro(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES, datos)
+    return datos
+
+
+def crear_solicitud(servicio, usuario, detalle):
+    datos = {
+        "ID": str(uuid.uuid4())[:8],
+        "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "Servicio": servicio,
+        "Cliente ID": usuario["ID"],
+        "Cliente": f'{usuario["Nombre"]} {usuario["Primer apellido"]} {usuario["Segundo apellido"]}'.strip(),
+        "Teléfono cliente": usuario["Teléfono"],
+        "Detalle": limpiar_texto(detalle),
+        "Estado": "Pendiente",
+        "Colaborador ID": "",
+        "Colaborador": "",
+        "Teléfono colaborador": ""
+    }
+    agregar_registro(HOJA_SOLICITUDES, ENCABEZADOS_SOLICITUDES, datos)
+    return datos
+
+
+def solicitudes_usuario(usuario_id):
+    solicitudes = leer_registros(HOJA_SOLICITUDES, ENCABEZADOS_SOLICITUDES)
+    return [s for s in solicitudes if s["Cliente ID"] == usuario_id]
+
+
+def solicitudes_pendientes_servicio(servicio):
+    solicitudes = leer_registros(HOJA_SOLICITUDES, ENCABEZADOS_SOLICITUDES)
+    return [s for s in solicitudes if s["Servicio"] == servicio and s["Estado"] == "Pendiente"]
+
+
+def solicitudes_colaborador(colaborador_id):
+    solicitudes = leer_registros(HOJA_SOLICITUDES, ENCABEZADOS_SOLICITUDES)
+    return [s for s in solicitudes if s["Colaborador ID"] == colaborador_id]
+
+
+def actualizar_estado_colaborador(colaborador, nuevo_estado):
+    actualizar_celda(
+        HOJA_COLABORADORES,
+        ENCABEZADOS_COLABORADORES,
+        int(colaborador["_fila"]),
+        "Estado",
+        nuevo_estado
+    )
+    colaborador["Estado"] = nuevo_estado
+    st.session_state.colaborador_actual = colaborador
+
+
+def aceptar_solicitud(solicitud, colaborador):
+    nombre_colaborador = f'{colaborador["Nombre"]} {colaborador["Primer apellido"]} {colaborador["Segundo apellido"]}'.strip()
+
+    actualizar_varias_celdas(
+        HOJA_SOLICITUDES,
+        ENCABEZADOS_SOLICITUDES,
+        int(solicitud["_fila"]),
+        {
+            "Estado": "Aceptado",
+            "Colaborador ID": colaborador["ID"],
+            "Colaborador": nombre_colaborador,
+            "Teléfono colaborador": colaborador["Teléfono"]
+        }
+    )
+    actualizar_estado_colaborador(colaborador, "Ocupado")
+
+
+def finalizar_solicitud(solicitud, colaborador):
+    actualizar_celda(
+        HOJA_SOLICITUDES,
+        ENCABEZADOS_SOLICITUDES,
+        int(solicitud["_fila"]),
+        "Estado",
+        "Finalizado"
+    )
+    actualizar_estado_colaborador(colaborador, "Disponible")
+
+
+# =========================================================
+# COMPONENTES
+# =========================================================
+
+def hero():
+    st.markdown("""
     <div class="hero">
-        <h1>{icono} {titulo}</h1>
-        <p>{texto}</p>
+        <h1>🛵 Express Local</h1>
+        <p>Demo web para solicitar taxi, express, carga y camión de forma rápida, colorida y ordenada.</p>
     </div>
     """, unsafe_allow_html=True)
 
 
-def mostrar_promo_carousel():
-    idx = int(time.time() / 4) % len(PROMOCIONES)
-    promo = PROMOCIONES[idx]
-    st.markdown(f"""
-    <div class="promo" style="background: linear-gradient(135deg, {promo['color']}, #7c3aed);">
+def promo_carousel():
+    st.markdown("""
+    <div class="promo-carousel">
         <div>
-            <h2>{promo['titulo']}</h2>
-            <p>{promo['texto']}</p>
-            <p class="small-muted" style="color:white!important; opacity:.90;">Este espacio se puede sustituir luego por imágenes reales de restaurantes o comercios.</p>
+            <h2>🔥 Promociones y servicios destacados</h2>
+            <p>Este espacio puede mostrar imágenes de restaurantes, comercios y ofertas. Cambia visualmente cada 4 segundos.</p>
         </div>
-        <div class="promo-emoji">{promo['emoji']}</div>
     </div>
     """, unsafe_allow_html=True)
 
 
-def menu_lateral():
+def sidebar_menu():
     with st.sidebar:
-        st.markdown("# 🛵 Express Local")
-        st.markdown("---")
-        if st.session_state.autenticado:
-            st.success(f"Sesión: {st.session_state.rol}")
-            st.write(nombre_completo(st.session_state.perfil))
-            if st.button("🏠 Inicio", use_container_width=True):
-                st.session_state.pagina = "panel"
+        st.title("🛵 Express Local")
+
+        if st.session_state.tipo == "Usuario" and st.session_state.usuario_actual:
+            u = st.session_state.usuario_actual
+            st.success(f"Usuario: {u['Usuario']}")
+
+        if st.session_state.tipo == "Colaborador" and st.session_state.colaborador_actual:
+            c = st.session_state.colaborador_actual
+            st.success(f"{c['Servicio']}: {c['Usuario']}")
+
+        st.divider()
+
+        if st.button("🏠 Inicio", use_container_width=True):
+            if st.session_state.tipo == "Usuario":
+                st.session_state.pagina = "panel_usuario"
+            elif st.session_state.tipo == "Colaborador":
+                st.session_state.pagina = "panel_colaborador"
+            else:
+                st.session_state.pagina = "login"
+            st.rerun()
+
+        if st.session_state.tipo == "Usuario":
+            if st.button("👤 Cambiar mis datos", use_container_width=True):
+                st.session_state.pagina = "editar_usuario"
                 st.rerun()
-            if st.button("✏️ Cambiar mis datos", use_container_width=True):
-                st.session_state.pagina = "perfil"
-                st.rerun()
-            mensaje = "Hola, necesito ayuda con la app de Express Local."
-            st.link_button("💬 Ayuda por WhatsApp", whatsapp_link(ADMIN_WHATSAPP, mensaje), use_container_width=True)
-            if st.button("🚪 Cerrar sesión", use_container_width=True):
-                cerrar_sesion()
-                st.rerun()
+
+        st.link_button(
+            "💬 Ayuda WhatsApp",
+            link_whatsapp(ADMIN_WHATSAPP, "Hola, necesito ayuda con la plataforma Express Local."),
+            use_container_width=True
+        )
+
+        if st.button("🚪 Cerrar sesión", use_container_width=True):
+            cerrar_sesion()
+            st.rerun()
+
+        st.divider()
+        st.caption("Claves demo para colaboradores")
+        for servicio, claves in CLAVES_COLABORADOR.items():
+            st.write(f"**{servicio}:** {', '.join(claves)}")
+
+
+def formulario_registro_usuario():
+    st.subheader("📝 Registro de usuario nuevo")
+    st.caption(f"Demo: máximo {LIMITE_USUARIOS_DEMO} usuarios registrados.")
+
+    with st.form("form_registro_usuario"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            nombre = st.text_input("Nombre")
+        with c2:
+            apellido1 = st.text_input("Primer apellido")
+        with c3:
+            apellido2 = st.text_input("Segundo apellido")
+
+        telefono = st.text_input("Número de teléfono Costa Rica")
+        usuario = st.text_input("Nombre de usuario")
+        clave = st.text_input("Clave", type="password", help="Puede usar números, mayúsculas y minúsculas.")
+
+        guardar = st.form_submit_button("Crear usuario")
+
+    if guardar:
+        if total_usuarios_registrados() >= LIMITE_USUARIOS_DEMO:
+            st.error(f"El demo permite registrar máximo {LIMITE_USUARIOS_DEMO} usuarios.")
+            return
+
+        if not all([nombre, apellido1, apellido2, telefono, usuario, clave]):
+            st.error("Debe completar todos los espacios.")
+            return
+
+        if usuario_existe(usuario):
+            st.error("Ese nombre de usuario ya existe. Use otro.")
+            return
+
+        nuevo = registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave)
+        st.success("Usuario creado correctamente. Ya puede ingresar.")
+        st.session_state.usuario_actual = nuevo
+        st.session_state.tipo = "Usuario"
+        st.session_state.pagina = "panel_usuario"
+        st.rerun()
+
+
+def formulario_login_usuario():
+    st.subheader("👤 Ingreso de usuario")
+    st.write("Ingrese con su usuario registrado para solicitar servicios.")
+
+    with st.form("form_login_usuario"):
+        usuario = st.text_input("Nombre de usuario", key="login_user_user")
+        clave = st.text_input("Clave", type="password", key="login_user_pass")
+        ingresar = st.form_submit_button("Ingresar como usuario")
+
+    if ingresar:
+        encontrado = buscar_usuario_login(usuario, clave)
+        if encontrado:
+            st.session_state.usuario_actual = encontrado
+            st.session_state.tipo = "Usuario"
+            st.session_state.pagina = "panel_usuario"
+            st.rerun()
         else:
-            st.info("Ingrese o regístrese para usar la app.")
-        st.markdown("---")
-        st.caption("Claves demo colaborador")
-        st.code("Taxi: TAXI-101 a TAXI-606\nExpress: EXP-101 a EXP-606\nCarga: CAR-101 a CAR-606\nCamión: CAM-101 a CAM-606")
+            st.error("Usuario o clave incorrecta.")
 
 
-menu_lateral()
+def formulario_registro_colaborador():
+    st.subheader("🛠️ Registro de colaborador")
+    st.caption(f"Demo: máximo {LIMITE_COLABORADORES_POR_SERVICIO} colaboradores por servicio.")
+
+    with st.form("form_registro_colaborador"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            nombre = st.text_input("Nombre", key="col_nombre")
+        with c2:
+            apellido1 = st.text_input("Primer apellido", key="col_ap1")
+        with c3:
+            apellido2 = st.text_input("Segundo apellido", key="col_ap2")
+
+        telefono = st.text_input("Número de teléfono Costa Rica", key="col_tel")
+        servicio = st.selectbox("Servicio que brindará", list(SERVICIOS.keys()))
+        codigo = st.text_input("Clave autorizada por el coordinador", type="password")
+        usuario = st.text_input("Nombre de usuario", key="col_user")
+        clave = st.text_input("Clave personal", type="password", help="Puede usar números, mayúsculas y minúsculas.", key="col_pass")
+
+        guardar = st.form_submit_button("Crear colaborador")
+
+    if guardar:
+        if not all([nombre, apellido1, apellido2, telefono, servicio, codigo, usuario, clave]):
+            st.error("Debe completar todos los espacios.")
+            return
+
+        if codigo.strip() not in CLAVES_COLABORADOR[servicio]:
+            st.error("La clave del coordinador no corresponde al servicio seleccionado.")
+            return
+
+        if total_colaboradores_servicio(servicio) >= LIMITE_COLABORADORES_POR_SERVICIO:
+            st.error(f"Ya existen {LIMITE_COLABORADORES_POR_SERVICIO} colaboradores registrados para {servicio}.")
+            return
+
+        if usuario_existe(usuario):
+            st.error("Ese nombre de usuario ya existe. Use otro.")
+            return
+
+        nuevo = registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave, servicio)
+        st.success("Colaborador creado correctamente.")
+        st.session_state.colaborador_actual = nuevo
+        st.session_state.tipo = "Colaborador"
+        st.session_state.pagina = "panel_colaborador"
+        st.rerun()
+
+
+def formulario_login_colaborador():
+    st.subheader("🛠️ Ingreso de colaborador")
+    st.write("Ingrese con sus credenciales registradas.")
+
+    with st.form("form_login_colaborador"):
+        usuario = st.text_input("Nombre de usuario", key="login_col_user")
+        clave = st.text_input("Clave", type="password", key="login_col_pass")
+        ingresar = st.form_submit_button("Ingresar como colaborador")
+
+    if ingresar:
+        encontrado = buscar_colaborador_login(usuario, clave)
+        if encontrado:
+            st.session_state.colaborador_actual = encontrado
+            st.session_state.tipo = "Colaborador"
+            st.session_state.pagina = "panel_colaborador"
+            st.rerun()
+        else:
+            st.error("Usuario o clave incorrecta.")
+
 
 # =========================================================
-# LOGIN Y REGISTRO
+# PÁGINAS
 # =========================================================
 
-def validar_telefono(tel: str) -> bool:
-    digitos = "".join([c for c in str(tel) if c.isdigit()])
-    if digitos.startswith("506"):
-        digitos = digitos[3:]
-    return len(digitos) == 8
+def pagina_login():
+    hero()
 
+    st.markdown("""
+    <div class="card">
+        <h2>Acceso principal</h2>
+        <p>Seleccione si desea ingresar como usuario o colaborador. También puede registrarse por primera vez.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-def usuario_existe(usuario: str) -> bool:
-    u = normalizar_usuario(usuario)
-    df_u = cargar_df("Usuarios", HEADERS_USUARIOS)
-    df_c = cargar_df("Colaboradores", HEADERS_COLABORADORES)
-    usuarios = set(df_u["usuario"].astype(str).map(normalizar_usuario).tolist()) | set(df_c["usuario"].astype(str).map(normalizar_usuario).tolist())
-    return u in usuarios
-
-
-def registrar_usuario(nombre, p1, p2, telefono, usuario, clave):
-    if usuario_existe(usuario):
-        st.error("Ese nombre de usuario ya existe. Use otro.")
-        return False
-    if not validar_telefono(telefono):
-        st.error("El teléfono debe tener 8 dígitos de Costa Rica. Puede escribirlo con o sin 506.")
-        return False
-    row = [str(uuid.uuid4())[:8], nombre.strip(), p1.strip(), p2.strip(), limpiar_telefono(telefono), normalizar_usuario(usuario), clave, "Usuario", datetime.now().strftime("%d/%m/%Y %H:%M")]
-    append_row("Usuarios", HEADERS_USUARIOS, row)
-    st.success("Usuario registrado correctamente. Ahora puede ingresar.")
-    return True
-
-
-def registrar_colaborador(nombre, p1, p2, telefono, usuario, clave, servicio, clave_autorizacion):
-    if clave_autorizacion not in CLAVES_COLABORADOR.get(servicio, []):
-        st.error("La clave de autorización no corresponde al servicio seleccionado.")
-        return False
-    if usuario_existe(usuario):
-        st.error("Ese nombre de usuario ya existe. Use otro.")
-        return False
-    if not validar_telefono(telefono):
-        st.error("El teléfono debe tener 8 dígitos de Costa Rica. Puede escribirlo con o sin 506.")
-        return False
-    row = [str(uuid.uuid4())[:8], nombre.strip(), p1.strip(), p2.strip(), limpiar_telefono(telefono), normalizar_usuario(usuario), clave, servicio, "Disponible", datetime.now().strftime("%d/%m/%Y %H:%M")]
-    append_row("Colaboradores", HEADERS_COLABORADORES, row)
-    st.success("Colaborador registrado correctamente. Ahora puede ingresar.")
-    return True
-
-
-def login(usuario, clave, rol):
-    usuario_n = normalizar_usuario(usuario)
-    if rol == "Usuario":
-        df = cargar_df("Usuarios", HEADERS_USUARIOS)
-    else:
-        df = cargar_df("Colaboradores", HEADERS_COLABORADORES)
-    if df.empty:
-        st.error("No hay registros disponibles.")
-        return
-    df["usuario_norm"] = df["usuario"].astype(str).map(normalizar_usuario)
-    match = df[(df["usuario_norm"] == usuario_n) & (df["clave"].astype(str) == str(clave))]
-    if match.empty:
-        st.error("Usuario o clave incorrecta.")
-        return
-    st.session_state.autenticado = True
-    st.session_state.rol = rol
-    st.session_state.perfil = match.iloc[0].to_dict()
-    st.session_state.pagina = "panel"
-    st.rerun()
-
-
-if not st.session_state.autenticado:
-    hero("Express Local", "Demo colorido para usuarios y colaboradores: taxi, express, carga y camión.", "🚀")
-    tab1, tab2, tab3, tab4 = st.tabs(["Ingresar usuario", "Registrar usuario", "Ingresar colaborador", "Registrar colaborador"])
+    tab1, tab2 = st.tabs(["👤 Usuarios", "🛠️ Colaboradores"])
 
     with tab1:
-        st.markdown('<div class="card login-card"><h2>👤 Ingreso de usuario</h2><p>Ingrese con su usuario registrado para solicitar servicios.</p></div>', unsafe_allow_html=True)
-        with st.form("login_usuario"):
-            u = st.text_input("Nombre de usuario", key="lu")
-            c = st.text_input("Clave", type="password", key="lc")
-            if st.form_submit_button("Ingresar como usuario"):
-                login(u, c, "Usuario")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown('<div class="login-card">', unsafe_allow_html=True)
+            formulario_login_usuario()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div class="login-card">', unsafe_allow_html=True)
+            formulario_registro_usuario()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
-        st.markdown('<div class="card login-card"><h2>📝 Registro de usuario</h2><p>Complete sus datos. El nombre de usuario no se puede repetir.</p></div>', unsafe_allow_html=True)
-        with st.form("registro_usuario"):
-            c1, c2, c3 = st.columns(3)
-            nombre = c1.text_input("Nombre")
-            p1 = c2.text_input("Primer apellido")
-            p2 = c3.text_input("Segundo apellido")
-            telefono = st.text_input("Número de teléfono")
-            usuario = st.text_input("Nombre de usuario")
-            clave = st.text_input("Clave", type="password")
-            if st.form_submit_button("Registrar usuario"):
-                if not all([nombre, p1, p2, telefono, usuario, clave]):
-                    st.error("Complete todos los campos.")
-                else:
-                    registrar_usuario(nombre, p1, p2, telefono, usuario, clave)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown('<div class="login-card">', unsafe_allow_html=True)
+            formulario_login_colaborador()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div class="login-card">', unsafe_allow_html=True)
+            formulario_registro_colaborador()
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    with tab3:
-        st.markdown('<div class="card login-card"><h2>🧰 Ingreso de colaborador</h2><p>Los colaboradores registrados ingresan con su usuario y clave.</p></div>', unsafe_allow_html=True)
-        with st.form("login_colaborador"):
-            u = st.text_input("Nombre de usuario", key="lcu")
-            c = st.text_input("Clave", type="password", key="lcc")
-            if st.form_submit_button("Ingresar como colaborador"):
-                login(u, c, "Colaborador")
 
-    with tab4:
-        st.markdown('<div class="card login-card"><h2>🔐 Registro de colaborador</h2><p>Debe tener una clave autorizada por el coordinador para registrarse.</p></div>', unsafe_allow_html=True)
-        with st.form("registro_colaborador"):
-            c1, c2, c3 = st.columns(3)
-            nombre = c1.text_input("Nombre", key="cn")
-            p1 = c2.text_input("Primer apellido", key="cp1")
-            p2 = c3.text_input("Segundo apellido", key="cp2")
-            telefono = st.text_input("Número de teléfono", key="ct")
-            usuario = st.text_input("Nombre de usuario", key="cu")
-            clave = st.text_input("Clave de ingreso", type="password", key="cc")
-            servicio = st.selectbox("Servicio que brindará", list(SERVICIOS.keys()), key="cs")
-            clave_aut = st.text_input("Clave dada por el coordinador", type="password", key="ca")
-            if st.form_submit_button("Registrar colaborador"):
-                if not all([nombre, p1, p2, telefono, usuario, clave, servicio, clave_aut]):
-                    st.error("Complete todos los campos.")
-                else:
-                    registrar_colaborador(nombre, p1, p2, telefono, usuario, clave, servicio, clave_aut)
+def pagina_panel_usuario():
+    sidebar_menu()
+    usuario = st.session_state.usuario_actual
 
-    st.stop()
-
-# =========================================================
-# PERFIL
-# =========================================================
-
-if st.session_state.pagina == "perfil":
-    hero("Mis datos", "Actualice su información básica de contacto.", "✏️")
-    perfil = st.session_state.perfil
-    with st.form("actualizar_perfil"):
-        c1, c2, c3 = st.columns(3)
-        nombre = c1.text_input("Nombre", value=str(perfil.get("nombre", "")))
-        p1 = c2.text_input("Primer apellido", value=str(perfil.get("primer_apellido", "")))
-        p2 = c3.text_input("Segundo apellido", value=str(perfil.get("segundo_apellido", "")))
-        telefono = st.text_input("Teléfono", value=str(perfil.get("telefono", "")))
-        if st.form_submit_button("Guardar cambios"):
-            if not validar_telefono(telefono):
-                st.error("Teléfono inválido.")
-            else:
-                hoja = "Usuarios" if st.session_state.rol == "Usuario" else "Colaboradores"
-                headers = HEADERS_USUARIOS if st.session_state.rol == "Usuario" else HEADERS_COLABORADORES
-                actualizar_varias_celdas_por_id(hoja, headers, perfil["id"], {
-                    "nombre": nombre,
-                    "primer_apellido": p1,
-                    "segundo_apellido": p2,
-                    "telefono": limpiar_telefono(telefono),
-                })
-                st.session_state.perfil.update({"nombre": nombre, "primer_apellido": p1, "segundo_apellido": p2, "telefono": limpiar_telefono(telefono)})
-                st.success("Datos actualizados.")
-    st.stop()
-
-# =========================================================
-# PANEL USUARIO
-# =========================================================
-
-if st.session_state.rol == "Usuario":
-    perfil = st.session_state.perfil
-    hero(f"Hola, {perfil.get('nombre')}", "Seleccione un servicio, revise colaboradores disponibles y coordine por WhatsApp.", "👤")
-    mostrar_promo_carousel()
-    st.write("")
-
-    st.subheader("Servicios disponibles")
-    cols = st.columns(4)
-    for i, (servicio, data) in enumerate(SERVICIOS.items()):
-        with cols[i]:
-            st.markdown(f"""
-            <div class="service-card {data['clase']}">
-                <h2>{data['icono']}<br>{data['titulo']}</h2>
-                <p>{data['descripcion']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button(f"Entrar a {servicio}", key=f"entrar_{servicio}"):
-                st.session_state.servicio_seleccionado = servicio
-                st.rerun()
-
-    servicio = st.session_state.servicio_seleccionado
-    if servicio:
-        data = SERVICIOS[servicio]
-        st.markdown("---")
-        st.markdown(f"""
-        <div class="card">
-            <h2>{data['icono']} {data['titulo']}</h2>
-            <p>{data['frase']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        df_col = cargar_df("Colaboradores", HEADERS_COLABORADORES)
-        df_col = df_col[df_col["servicio"].astype(str) == servicio]
-
-        st.subheader("Colaboradores del servicio")
-        if df_col.empty:
-            st.info("Todavía no hay colaboradores registrados para este servicio.")
-        else:
-            for _, row in df_col.iterrows():
-                st.markdown(f"""
-                <div class="card worker-row">
-                    <h3>{nombre_completo(row)}</h3>
-                    <p><b>Servicio:</b> {row['servicio']} &nbsp; <b>Estado:</b> {estado_badge(row['estado'])}</p>
-                    <p><b>Teléfono:</b> {row['telefono']}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.subheader("Hacer llamado a colaboradores disponibles")
-        disponibles = df_col[df_col["estado"].astype(str) == "Disponible"]
-        if disponibles.empty:
-            st.warning("No hay colaboradores disponibles en este momento.")
-        else:
-            with st.form("crear_solicitud_broadcast"):
-                origen = st.text_input("Lugar de salida / recogida / compra")
-                destino = st.text_input("Lugar de destino / entrega")
-                detalle = st.text_area("Detalle del servicio solicitado")
-                enviar = st.form_submit_button("📣 Enviar solicitud a disponibles")
-                if enviar:
-                    solicitud_id = str(uuid.uuid4())[:8]
-                    append_row("Solicitudes", HEADERS_SOLICITUDES, [
-                        solicitud_id,
-                        datetime.now().strftime("%d/%m/%Y %H:%M"),
-                        servicio,
-                        perfil["usuario"],
-                        nombre_completo(perfil),
-                        perfil["telefono"],
-                        "",
-                        "",
-                        "",
-                        "Pendiente",
-                        detalle,
-                        origen,
-                        destino,
-                        "",
-                    ])
-                    st.success("Solicitud enviada. Los colaboradores disponibles de ese servicio podrán aceptarla.")
-                    st.rerun()
-
-    st.markdown("---")
-    st.subheader("Mis solicitudes")
-    df_sol = cargar_df("Solicitudes", HEADERS_SOLICITUDES)
-    df_mis = df_sol[df_sol["usuario_cliente"].astype(str) == str(perfil.get("usuario"))]
-    if df_mis.empty:
-        st.info("No tiene solicitudes registradas.")
-    else:
-        for _, s in df_mis.sort_values("fecha", ascending=False).iterrows():
-            st.markdown(f"""
-            <div class="card">
-                <h3>Solicitud #{s['id']} - {s['servicio']}</h3>
-                <p><b>Estado:</b> {estado_badge(s['estado'])}</p>
-                <p><b>Detalle:</b> {s['detalle']}</p>
-                <p><b>Origen:</b> {s['origen']}</p>
-                <p><b>Destino:</b> {s['destino']}</p>
-                <p><b>Colaborador asignado:</b> {s['colaborador_nombre'] if s['colaborador_nombre'] else 'Pendiente de aceptación'}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            if str(s["estado"]) == "Aceptado" and str(s["telefono_colaborador"]):
-                msg = f"Hola {s['colaborador_nombre']}, soy {s['cliente_nombre']}. Mi solicitud es #{s['id']} para {s['servicio']}. Origen: {s['origen']}. Destino: {s['destino']}."
-                st.link_button("💬 Chatear con colaborador por WhatsApp", whatsapp_link(s["telefono_colaborador"], msg), use_container_width=True)
-
-# =========================================================
-# PANEL COLABORADOR
-# =========================================================
-
-if st.session_state.rol == "Colaborador":
-    perfil = st.session_state.perfil
-    servicio = perfil.get("servicio")
-    data = SERVICIOS.get(servicio, SERVICIOS["Express"])
-    hero(f"Panel {servicio}", "Administre su estado y acepte solicitudes pendientes de su servicio.", data["icono"])
-    mostrar_promo_carousel()
+    promo_carousel()
 
     st.markdown(f"""
-    <div class="card" style="border-left: 10px solid {data['color']};">
-        <h2>{nombre_completo(perfil)}</h2>
-        <p><b>Servicio:</b> {servicio}</p>
-        <p><b>Teléfono:</b> {perfil.get('telefono')}</p>
-        <p><b>Estado actual:</b> {estado_badge(perfil.get('estado'))}</p>
+    <div class="card">
+        <h2>Hola, {usuario['Nombre']} 👋</h2>
+        <p>Seleccione el servicio que necesita. La solicitud será visible para los colaboradores disponibles de ese servicio.</p>
     </div>
     """, unsafe_allow_html=True)
+
+    cols = st.columns(4)
+    for i, (servicio, info) in enumerate(SERVICIOS.items()):
+        with cols[i]:
+            st.markdown(f"""
+            <div class="service-card" style="background: linear-gradient(135deg, {info['color1']}, {info['color2']});">
+                <h2>{info['icono']}<br>{servicio}</h2>
+                <p>{info['descripcion']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button(f"Solicitar {servicio}", key=f"sol_{servicio}", use_container_width=True):
+                st.session_state.servicio_seleccionado = servicio
+                st.session_state.pagina = "servicio_usuario"
+                st.rerun()
+
+    st.divider()
+    st.subheader("📋 Mis solicitudes")
+
+    solicitudes = solicitudes_usuario(usuario["ID"])
+    if not solicitudes:
+        st.info("Todavía no tiene solicitudes registradas.")
+    else:
+        for s in reversed(solicitudes):
+            st.markdown(f"""
+            <div class="card">
+                <h3>{s['Servicio']} · Solicitud #{s['ID']}</h3>
+                <p><b>Fecha:</b> {s['Fecha']}</p>
+                <p><b>Estado:</b> {badge_estado(s['Estado'])}</p>
+                <p><b>Detalle:</b> {s['Detalle']}</p>
+                <p><b>Colaborador:</b> {s['Colaborador'] if s['Colaborador'] else 'Pendiente de aceptación'}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if s["Estado"] == "Aceptado" and s["Teléfono colaborador"]:
+                mensaje = (
+                    f"Hola {s['Colaborador']}, soy {s['Cliente']}. "
+                    f"Tengo la solicitud #{s['ID']} de {s['Servicio']}. "
+                    "Quisiera coordinar los detalles por este medio."
+                )
+                st.link_button(
+                    "💬 Chatear con colaborador por WhatsApp",
+                    link_whatsapp(s["Teléfono colaborador"], mensaje),
+                    use_container_width=True
+                )
+
+
+def pagina_servicio_usuario():
+    sidebar_menu()
+    usuario = st.session_state.usuario_actual
+    servicio = st.session_state.servicio_seleccionado
+
+    if not servicio:
+        st.session_state.pagina = "panel_usuario"
+        st.rerun()
+
+    info = SERVICIOS[servicio]
+
+    st.markdown(f"""
+    <div class="service-card" style="background: linear-gradient(135deg, {info['color1']}, {info['color2']});">
+        <h2>{info['icono']} {servicio}</h2>
+        <p>{info['descripcion']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
+    colaboradores_servicio = [c for c in colaboradores if c["Servicio"] == servicio]
+
+    disponibles = [c for c in colaboradores_servicio if c["Estado"] == "Disponible"]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Colaboradores registrados", len(colaboradores_servicio))
+    c2.metric("Disponibles", len(disponibles))
+    c3.metric("Ocupados / fuera", len(colaboradores_servicio) - len(disponibles))
+
+    st.subheader("🚦 Estado de colaboradores")
+
+    if not colaboradores_servicio:
+        st.warning("Aún no hay colaboradores registrados para este servicio.")
+    else:
+        for c in colaboradores_servicio:
+            nombre = f'{c["Nombre"]} {c["Primer apellido"]} {c["Segundo apellido"]}'.strip()
+            st.markdown(f"""
+            <div class="card">
+                <h3>{nombre}</h3>
+                <p><b>Servicio:</b> {c['Servicio']}</p>
+                <p><b>Estado:</b> {badge_estado(c['Estado'])}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("📲 Hacer llamado a colaboradores disponibles")
+
+    with st.form("crear_solicitud_servicio"):
+        detalle = st.text_area(
+            "Detalle de la solicitud",
+            placeholder="Ejemplo: necesito un taxi hacia el centro / retirar comida en restaurante / trasladar una caja..."
+        )
+        enviar = st.form_submit_button(f"Hacer llamado de {servicio}")
+
+    if enviar:
+        if not disponibles:
+            st.error("No hay colaboradores disponibles en este momento.")
+            return
+
+        if not detalle.strip():
+            st.error("Debe indicar el detalle de la solicitud.")
+            return
+
+        nueva = crear_solicitud(servicio, usuario, detalle)
+        st.success(f"Solicitud enviada. Código: {nueva['ID']}. Espere a que un colaborador la acepte.")
+        st.session_state.pagina = "panel_usuario"
+        st.rerun()
+
+    if st.button("⬅️ Volver a servicios", use_container_width=True):
+        st.session_state.pagina = "panel_usuario"
+        st.rerun()
+
+
+def pagina_panel_colaborador():
+    sidebar_menu()
+    colaborador = st.session_state.colaborador_actual
+    servicio = colaborador["Servicio"]
+    info = SERVICIOS[servicio]
+
+    st.markdown(f"""
+    <div class="service-card" style="background: linear-gradient(135deg, {info['color1']}, {info['color2']});">
+        <h2>{info['icono']} Panel de {servicio}</h2>
+        <p>Administre su estado y acepte solicitudes pendientes.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    nombre = f'{colaborador["Nombre"]} {colaborador["Primer apellido"]} {colaborador["Segundo apellido"]}'.strip()
+
+    st.markdown(f"""
+    <div class="card">
+        <h2>{nombre}</h2>
+        <p><b>Teléfono:</b> {colaborador['Teléfono']}</p>
+        <p><b>Servicio:</b> {servicio}</p>
+        <p><b>Estado actual:</b> {badge_estado(colaborador['Estado'])}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("🚦 Cambiar estado")
 
     c1, c2 = st.columns([2, 1])
     with c1:
-        nuevo_estado = st.selectbox("Cambiar estado", ["Disponible", "Ocupado", "Fuera de servicio"], index=["Disponible", "Ocupado", "Fuera de servicio"].index(perfil.get("estado", "Disponible")))
+        nuevo_estado = st.selectbox(
+            "Estado",
+            ["Disponible", "Ocupado", "Fuera de servicio"],
+            index=["Disponible", "Ocupado", "Fuera de servicio"].index(colaborador["Estado"])
+            if colaborador["Estado"] in ["Disponible", "Ocupado", "Fuera de servicio"] else 0
+        )
     with c2:
         st.write("")
         st.write("")
-        if st.button("Actualizar estado"):
-            actualizar_celda_por_id("Colaboradores", HEADERS_COLABORADORES, perfil["id"], "estado", nuevo_estado)
-            st.session_state.perfil["estado"] = nuevo_estado
+        if st.button("Actualizar estado", use_container_width=True):
+            actualizar_estado_colaborador(colaborador, nuevo_estado)
             st.success("Estado actualizado.")
             st.rerun()
 
-    st.markdown("---")
-    st.subheader("Solicitudes pendientes para mi servicio")
-    df_sol = cargar_df("Solicitudes", HEADERS_SOLICITUDES)
-    pendientes = df_sol[(df_sol["servicio"].astype(str) == str(servicio)) & (df_sol["estado"].astype(str) == "Pendiente")]
-    if perfil.get("estado") != "Disponible":
+    st.divider()
+    st.subheader("🔔 Solicitudes pendientes para mi servicio")
+
+    pendientes = solicitudes_pendientes_servicio(servicio)
+
+    if colaborador["Estado"] != "Disponible":
         st.warning("Para aceptar nuevas solicitudes debe estar en estado Disponible.")
-    elif pendientes.empty:
+
+    if not pendientes:
         st.info("No hay solicitudes pendientes para este servicio.")
     else:
-        for _, s in pendientes.iterrows():
+        for s in reversed(pendientes):
             st.markdown(f"""
             <div class="card">
-                <h3>Solicitud #{s['id']}</h3>
-                <p><b>Cliente:</b> {s['cliente_nombre']}</p>
-                <p><b>Teléfono cliente:</b> {s['telefono_cliente']}</p>
-                <p><b>Origen:</b> {s['origen']}</p>
-                <p><b>Destino:</b> {s['destino']}</p>
-                <p><b>Detalle:</b> {s['detalle']}</p>
+                <h3>Solicitud #{s['ID']} · {s['Servicio']}</h3>
+                <p><b>Fecha:</b> {s['Fecha']}</p>
+                <p><b>Cliente:</b> {s['Cliente']}</p>
+                <p><b>Detalle:</b> {s['Detalle']}</p>
+                <p><b>Estado:</b> {badge_estado(s['Estado'])}</p>
             </div>
             """, unsafe_allow_html=True)
-            if st.button(f"✅ Aceptar solicitud #{s['id']}", key=f"aceptar_{s['id']}"):
-                ok = actualizar_varias_celdas_por_id("Solicitudes", HEADERS_SOLICITUDES, s["id"], {
-                    "colaborador_id": perfil["id"],
-                    "colaborador_nombre": nombre_completo(perfil),
-                    "telefono_colaborador": perfil["telefono"],
-                    "estado": "Aceptado",
-                    "aceptado_fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                })
-                if ok:
-                    actualizar_celda_por_id("Colaboradores", HEADERS_COLABORADORES, perfil["id"], "estado", "Ocupado")
-                    st.session_state.perfil["estado"] = "Ocupado"
-                    st.success("Solicitud aceptada. El usuario verá su contacto para WhatsApp.")
+
+            if colaborador["Estado"] == "Disponible":
+                if st.button(f"✅ Aceptar solicitud #{s['ID']}", key=f"aceptar_{s['ID']}", use_container_width=True):
+                    aceptar_solicitud(s, colaborador)
+                    st.success("Solicitud aceptada. Ahora el usuario podrá contactarlo por WhatsApp.")
                     st.rerun()
 
-    st.markdown("---")
-    st.subheader("Mis servicios aceptados")
-    df_sol = cargar_df("Solicitudes", HEADERS_SOLICITUDES)
-    asignadas = df_sol[df_sol["colaborador_id"].astype(str) == str(perfil.get("id"))]
-    if asignadas.empty:
+    st.divider()
+    st.subheader("📌 Mis servicios aceptados")
+
+    aceptadas = solicitudes_colaborador(colaborador["ID"])
+    if not aceptadas:
         st.info("Aún no tiene solicitudes aceptadas.")
     else:
-        for _, s in asignadas.sort_values("fecha", ascending=False).iterrows():
+        for s in reversed(aceptadas):
             st.markdown(f"""
             <div class="card">
-                <h3>Solicitud #{s['id']} - {s['servicio']}</h3>
-                <p><b>Estado:</b> {estado_badge(s['estado'])}</p>
-                <p><b>Cliente:</b> {s['cliente_nombre']} | {s['telefono_cliente']}</p>
-                <p><b>Origen:</b> {s['origen']}</p>
-                <p><b>Destino:</b> {s['destino']}</p>
-                <p><b>Detalle:</b> {s['detalle']}</p>
+                <h3>Solicitud #{s['ID']} · {s['Servicio']}</h3>
+                <p><b>Cliente:</b> {s['Cliente']}</p>
+                <p><b>Teléfono cliente:</b> {s['Teléfono cliente']}</p>
+                <p><b>Detalle:</b> {s['Detalle']}</p>
+                <p><b>Estado:</b> {badge_estado(s['Estado'])}</p>
             </div>
             """, unsafe_allow_html=True)
-            msg = f"Hola {s['cliente_nombre']}, soy {nombre_completo(perfil)}. Acepté su solicitud #{s['id']} para {s['servicio']}."
-            st.link_button("💬 Chatear con usuario por WhatsApp", whatsapp_link(s["telefono_cliente"], msg), use_container_width=True)
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                if st.button(f"Finalizar #{s['id']}", key=f"fin_{s['id']}"):
-                    actualizar_celda_por_id("Solicitudes", HEADERS_SOLICITUDES, s["id"], "estado", "Finalizado")
-                    actualizar_celda_por_id("Colaboradores", HEADERS_COLABORADORES, perfil["id"], "estado", "Disponible")
-                    st.session_state.perfil["estado"] = "Disponible"
+
+            mensaje = (
+                f"Hola {s['Cliente']}, soy {s['Colaborador']}, "
+                f"acepté su solicitud #{s['ID']} de {s['Servicio']}. "
+                "Coordinemos los detalles por este medio."
+            )
+
+            st.link_button(
+                "💬 Chatear con usuario por WhatsApp",
+                link_whatsapp(s["Teléfono cliente"], mensaje),
+                use_container_width=True
+            )
+
+            if s["Estado"] != "Finalizado":
+                if st.button(f"🏁 Finalizar solicitud #{s['ID']}", key=f"fin_{s['ID']}", use_container_width=True):
+                    finalizar_solicitud(s, colaborador)
+                    st.success("Solicitud finalizada.")
                     st.rerun()
-            with cc2:
-                if st.button(f"Cancelar #{s['id']}", key=f"can_{s['id']}"):
-                    actualizar_celda_por_id("Solicitudes", HEADERS_SOLICITUDES, s["id"], "estado", "Cancelado")
-                    actualizar_celda_por_id("Colaboradores", HEADERS_COLABORADORES, perfil["id"], "estado", "Disponible")
-                    st.session_state.perfil["estado"] = "Disponible"
-                    st.rerun()
+
+
+def pagina_editar_usuario():
+    sidebar_menu()
+    usuario = st.session_state.usuario_actual
+
+    st.subheader("👤 Cambiar datos de usuario")
+    st.info("Por seguridad del demo, aquí se actualizan nombre, apellidos y teléfono. El usuario y clave quedan igual.")
+
+    with st.form("editar_usuario"):
+        nombre = st.text_input("Nombre", value=usuario["Nombre"])
+        apellido1 = st.text_input("Primer apellido", value=usuario["Primer apellido"])
+        apellido2 = st.text_input("Segundo apellido", value=usuario["Segundo apellido"])
+        telefono = st.text_input("Teléfono", value=usuario["Teléfono"])
+        guardar = st.form_submit_button("Guardar cambios")
+
+    if guardar:
+        cambios = {
+            "Nombre": limpiar_texto(nombre),
+            "Primer apellido": limpiar_texto(apellido1),
+            "Segundo apellido": limpiar_texto(apellido2),
+            "Teléfono": telefono_whatsapp_cr(telefono)
+        }
+
+        actualizar_varias_celdas(
+            HOJA_USUARIOS,
+            ENCABEZADOS_USUARIOS,
+            int(usuario["_fila"]),
+            cambios
+        )
+
+        usuario.update(cambios)
+        st.session_state.usuario_actual = usuario
+        st.success("Datos actualizados.")
+        st.session_state.pagina = "panel_usuario"
+        st.rerun()
+
+
+# =========================================================
+# EJECUCIÓN
+# =========================================================
+
+inicializar_estado()
+
+try:
+    if st.session_state.pagina == "login":
+        pagina_login()
+    elif st.session_state.pagina == "panel_usuario":
+        pagina_panel_usuario()
+    elif st.session_state.pagina == "servicio_usuario":
+        pagina_servicio_usuario()
+    elif st.session_state.pagina == "panel_colaborador":
+        pagina_panel_colaborador()
+    elif st.session_state.pagina == "editar_usuario":
+        pagina_editar_usuario()
+    else:
+        st.session_state.pagina = "login"
+        st.rerun()
+
+except Exception as e:
+    st.error("Ocurrió un error en la aplicación.")
+    st.exception(e)
