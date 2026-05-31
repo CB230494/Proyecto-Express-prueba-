@@ -1,6 +1,6 @@
 streamlit
-streamlit-folium
-folium
+gspread
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
 pandas
-requests
-polyline
