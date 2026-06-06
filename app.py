@@ -11,6 +11,7 @@ from datetime import datetime
 import uuid
 import re
 from urllib.parse import quote
+from streamlit_autorefresh import st_autorefresh
 
 # =========================================================
 # CONFIGURACIÓN GENERAL DE STREAMLIT
@@ -414,46 +415,40 @@ input, textarea, select {
 }
 
 /* =========================================================
-   BOTÓN ADMINISTRADOR OCULTO / DISCRETO
+   BOTÓN ADMINISTRADOR
    ========================================================= */
 
-.admin-top-link {
-    position: fixed;
-    top: 22px;
-    right: 28px;
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #64748b !important;
-    font-size: 14px;
-    font-weight: 600;
-    opacity: 0.82;
-}
-
-.admin-top-link span {
-    color: #64748b !important;
-}
-
-/* Streamlit button dentro del bloque administrador */
-.admin-button-wrapper div.stButton > button {
-    background: transparent !important;
-    color: #64748b !important;
-    box-shadow: none !important;
-    border: none !important;
-    min-height: 28px !important;
-    padding: 0 !important;
+.admin-button-wrapper button {
+    width: 100% !important;
+    min-width: 190px !important;
+    height: 44px !important;
+    padding: 8px 18px !important;
+    border-radius: 999px !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
     font-size: 14px !important;
-    font-weight: 600 !important;
-    opacity: 0.78;
+    line-height: 1 !important;
 }
 
-.admin-button-wrapper div.stButton > button:hover {
-    background: transparent !important;
-    color: #fb4b18 !important;
-    transform: none !important;
-    box-shadow: none !important;
-    opacity: 1;
+/* =========================================================
+   ALERTAS VISUALES
+   ========================================================= */
+
+.alerta-sonido-box {
+    background: linear-gradient(135deg, #f97316, #ef4444);
+    color: white !important;
+    border-radius: 22px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 18px 36px rgba(239, 68, 68, 0.24);
+    font-weight: 900;
+}
+
+.alerta-sonido-box h3,
+.alerta-sonido-box p {
+    color: white !important;
+    margin: 0;
 }
 
 /* =========================================================
@@ -499,10 +494,9 @@ input, textarea, select {
         font-size: 25px;
     }
 
-    .admin-top-link {
-        top: 12px;
-        right: 14px;
-        font-size: 12px;
+    .admin-button-wrapper button {
+        min-width: 150px !important;
+        font-size: 13px !important;
     }
 }
 
@@ -760,6 +754,7 @@ def inicializar_estado():
     """
     Inicializa las variables principales de sesión.
     Estas variables controlan qué pantalla ve cada persona.
+    También inicializa variables de alertas internas.
     """
     valores = {
         "pagina": "login",
@@ -767,7 +762,14 @@ def inicializar_estado():
         "usuario_actual": None,
         "colaborador_actual": None,
         "servicio_seleccionado": None,
-        "admin_autenticado": False
+        "admin_autenticado": False,
+
+        # Variables para alertas sonoras y visuales
+        "alertas_activadas": True,
+        "ultimo_total_pendientes_colaborador": 0,
+        "ultimo_total_aceptadas_usuario": 0,
+        "ultima_alerta_usuario_ids": "",
+        "ultima_alerta_colaborador_ids": ""
     }
 
     for clave, valor in valores.items():
@@ -778,6 +780,7 @@ def inicializar_estado():
 def cerrar_sesion():
     """
     Cierra cualquier sesión activa y devuelve la app al login.
+    También reinicia los controles de alertas.
     """
     st.session_state.pagina = "login"
     st.session_state.tipo = None
@@ -785,6 +788,11 @@ def cerrar_sesion():
     st.session_state.colaborador_actual = None
     st.session_state.servicio_seleccionado = None
     st.session_state.admin_autenticado = False
+
+    st.session_state.ultimo_total_pendientes_colaborador = 0
+    st.session_state.ultimo_total_aceptadas_usuario = 0
+    st.session_state.ultima_alerta_usuario_ids = ""
+    st.session_state.ultima_alerta_colaborador_ids = ""
 
 
 # =========================================================
@@ -924,7 +932,7 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
     return datos
 # =========================================================
 # PARTE 3 / 5
-# SOLICITUDES, COMPONENTES VISUALES Y FORMULARIOS
+# SOLICITUDES, COMPONENTES VISUALES, ALERTAS Y FORMULARIOS
 # =========================================================
 
 # =========================================================
@@ -1070,6 +1078,49 @@ def finalizar_solicitud(solicitud, colaborador):
 
 
 # =========================================================
+# FUNCIONES DE ALERTA SONORA Y VISUAL
+# =========================================================
+
+def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actualización nueva en la app."):
+    """
+    Reproduce una alerta sonora dentro de la app y muestra
+    una tarjeta visual de notificación.
+
+    Importante:
+    Algunos navegadores pueden bloquear el sonido automático
+    si el usuario no ha interactuado antes con la página.
+    """
+    if not st.session_state.get("alertas_activadas", True):
+        return
+
+    st.markdown(f"""
+    <div class="alerta-sonido-box">
+        <h3>{titulo}</h3>
+        <p>{mensaje}</p>
+    </div>
+
+    <audio autoplay>
+        <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
+    </audio>
+    """, unsafe_allow_html=True)
+
+    st.toast(mensaje)
+
+
+def activar_refresco_automatico():
+    """
+    Refresca automáticamente la app cada cierto tiempo
+    para revisar cambios en solicitudes.
+
+    15000 milisegundos = 15 segundos.
+    """
+    st_autorefresh(
+        interval=15000,
+        key="refresco_automatico_notificaciones"
+    )
+
+
+# =========================================================
 # COMPONENTES VISUALES
 # =========================================================
 
@@ -1156,11 +1207,6 @@ def sidebar_menu():
             use_container_width=True
         )
 
-        # -------------------------------------------------
-        # CLAVES DEMO
-        # Solo se muestran dentro del panel administrador.
-        # Ya no aparecen para usuarios ni colaboradores.
-        # -------------------------------------------------
         if st.session_state.tipo == "Administrador":
             st.divider()
 
@@ -1218,6 +1264,10 @@ def formulario_login_usuario():
             st.session_state.usuario_actual = encontrado
             st.session_state.tipo = "Usuario"
             st.session_state.pagina = "panel_usuario"
+
+            st.session_state.ultimo_total_aceptadas_usuario = 0
+            st.session_state.ultima_alerta_usuario_ids = ""
+
             st.rerun()
         else:
             st.error("Usuario o clave incorrecta.")
@@ -1288,6 +1338,10 @@ def formulario_registro_usuario():
         st.session_state.usuario_actual = nuevo
         st.session_state.tipo = "Usuario"
         st.session_state.pagina = "panel_usuario"
+
+        st.session_state.ultimo_total_aceptadas_usuario = 0
+        st.session_state.ultima_alerta_usuario_ids = ""
+
         st.rerun()
 
 
@@ -1330,6 +1384,10 @@ def formulario_login_colaborador():
             st.session_state.colaborador_actual = encontrado
             st.session_state.tipo = "Colaborador"
             st.session_state.pagina = "panel_colaborador"
+
+            st.session_state.ultimo_total_pendientes_colaborador = 0
+            st.session_state.ultima_alerta_colaborador_ids = ""
+
             st.rerun()
         else:
             st.error("Usuario o clave incorrecta.")
@@ -1427,6 +1485,10 @@ def formulario_registro_colaborador():
         st.session_state.colaborador_actual = nuevo
         st.session_state.tipo = "Colaborador"
         st.session_state.pagina = "panel_colaborador"
+
+        st.session_state.ultimo_total_pendientes_colaborador = 0
+        st.session_state.ultima_alerta_colaborador_ids = ""
+
         st.rerun()
 # =========================================================
 # PARTE 4 / 5
@@ -1437,27 +1499,23 @@ def pagina_login():
     """
     Pantalla principal de ingreso.
     Mantiene las pestañas de Usuarios y Colaboradores.
-    Botón administrador corregido para que el texto no se corte.
+    Botón administrador corregido.
     """
     hero()
 
     st.markdown("""
     <style>
     .admin-admin-box {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        margin-top: 12px;
-        margin-bottom: 4px;
+        margin-top: 10px;
+        margin-bottom: 6px;
     }
 
-    .admin-admin-box + div button,
-    div[data-testid="column"]:last-child button {
+    .admin-admin-box button {
         white-space: nowrap !important;
         word-break: normal !important;
         overflow-wrap: normal !important;
-        min-width: 180px !important;
-        height: 42px !important;
+        min-width: 190px !important;
+        height: 44px !important;
         padding: 8px 18px !important;
         border-radius: 999px !important;
         font-size: 14px !important;
@@ -1511,6 +1569,12 @@ def pagina_login():
 
 
 def pagina_panel_usuario():
+    """
+    Panel principal para usuarios.
+    Permite seleccionar servicios, ver solicitudes propias
+    y recibir alerta cuando una solicitud pasa a Aceptado.
+    """
+    activar_refresco_automatico()
     sidebar_menu()
 
     usuario = st.session_state.usuario_actual
@@ -1525,6 +1589,30 @@ def pagina_panel_usuario():
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    solicitudes = solicitudes_usuario(usuario["ID"])
+
+    aceptadas_usuario = [
+        s for s in solicitudes
+        if s["Estado"] == "Aceptado"
+    ]
+
+    ids_aceptadas_actuales = ",".join(
+        sorted([s["ID"] for s in aceptadas_usuario])
+    )
+
+    if (
+        ids_aceptadas_actuales
+        and st.session_state.ultima_alerta_usuario_ids
+        and ids_aceptadas_actuales != st.session_state.ultima_alerta_usuario_ids
+    ):
+        reproducir_alerta(
+            "🔔 Solicitud aceptada",
+            "Un colaborador aceptó una de sus solicitudes."
+        )
+
+    st.session_state.ultima_alerta_usuario_ids = ids_aceptadas_actuales
+    st.session_state.ultimo_total_aceptadas_usuario = len(aceptadas_usuario)
 
     cols = st.columns(4)
 
@@ -1548,8 +1636,6 @@ def pagina_panel_usuario():
 
     st.divider()
     st.subheader("📋 Mis solicitudes")
-
-    solicitudes = solicitudes_usuario(usuario["ID"])
 
     if not solicitudes:
         st.info("Todavía no tiene solicitudes registradas.")
@@ -1580,6 +1666,10 @@ def pagina_panel_usuario():
 
 
 def pagina_servicio_usuario():
+    """
+    Muestra información del servicio seleccionado,
+    colaboradores disponibles y formulario de solicitud.
+    """
     sidebar_menu()
 
     usuario = st.session_state.usuario_actual
@@ -1598,11 +1688,23 @@ def pagina_servicio_usuario():
     </div>
     """, unsafe_allow_html=True)
 
-    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
-    colaboradores_servicio = [c for c in colaboradores if c["Servicio"] == servicio]
-    disponibles = [c for c in colaboradores_servicio if c["Estado"] == "Disponible"]
+    colaboradores = leer_registros(
+        HOJA_COLABORADORES,
+        ENCABEZADOS_COLABORADORES
+    )
+
+    colaboradores_servicio = [
+        c for c in colaboradores
+        if c["Servicio"] == servicio
+    ]
+
+    disponibles = [
+        c for c in colaboradores_servicio
+        if c["Estado"] == "Disponible"
+    ]
 
     c1, c2, c3 = st.columns(3)
+
     c1.metric("Colaboradores registrados", len(colaboradores_servicio))
     c2.metric("Disponibles", len(disponibles))
     c3.metric("Ocupados / fuera", len(colaboradores_servicio) - len(disponibles))
@@ -1613,7 +1715,11 @@ def pagina_servicio_usuario():
         st.warning("Aún no hay colaboradores registrados para este servicio.")
     else:
         for c in colaboradores_servicio:
-            nombre = f'{c["Nombre"]} {c["Primer apellido"]} {c["Segundo apellido"]}'.strip()
+            nombre = (
+                f'{c["Nombre"]} '
+                f'{c["Primer apellido"]} '
+                f'{c["Segundo apellido"]}'
+            ).strip()
 
             st.markdown(f"""
             <div class="card">
@@ -1632,7 +1738,9 @@ def pagina_servicio_usuario():
             placeholder="Ejemplo: necesito un taxi hacia el centro / retirar comida en restaurante / trasladar una caja..."
         )
 
-        enviar = st.form_submit_button(f"Hacer llamado de {servicio}")
+        enviar = st.form_submit_button(
+            f"Hacer llamado de {servicio}"
+        )
 
     if enviar:
         if not disponibles:
@@ -1643,7 +1751,11 @@ def pagina_servicio_usuario():
             st.error("Debe indicar el detalle de la solicitud.")
             return
 
-        nueva = crear_solicitud(servicio, usuario, detalle)
+        nueva = crear_solicitud(
+            servicio,
+            usuario,
+            detalle
+        )
 
         st.success(
             f"Solicitud enviada. Código: {nueva['ID']}. Espere a que un colaborador la acepte."
@@ -1658,6 +1770,12 @@ def pagina_servicio_usuario():
 
 
 def pagina_panel_colaborador():
+    """
+    Panel principal de colaborador.
+    Permite cambiar estado, aceptar solicitudes, finalizar servicios
+    y recibir alerta cuando hay nuevas solicitudes pendientes.
+    """
+    activar_refresco_automatico()
     sidebar_menu()
 
     colaborador = st.session_state.colaborador_actual
@@ -1671,7 +1789,11 @@ def pagina_panel_colaborador():
     </div>
     """, unsafe_allow_html=True)
 
-    nombre = f'{colaborador["Nombre"]} {colaborador["Primer apellido"]} {colaborador["Segundo apellido"]}'.strip()
+    nombre = (
+        f'{colaborador["Nombre"]} '
+        f'{colaborador["Primer apellido"]} '
+        f'{colaborador["Segundo apellido"]}'
+    ).strip()
 
     st.markdown(f"""
     <div class="card">
@@ -1699,7 +1821,10 @@ def pagina_panel_colaborador():
         st.write("")
 
         if st.button("Actualizar estado", use_container_width=True):
-            actualizar_estado_colaborador(colaborador, nuevo_estado)
+            actualizar_estado_colaborador(
+                colaborador,
+                nuevo_estado
+            )
             st.success("Estado actualizado.")
             st.rerun()
 
@@ -1707,6 +1832,23 @@ def pagina_panel_colaborador():
     st.subheader("🔔 Solicitudes pendientes para mi servicio")
 
     pendientes = solicitudes_pendientes_servicio(servicio)
+
+    ids_pendientes_actuales = ",".join(
+        sorted([s["ID"] for s in pendientes])
+    )
+
+    if (
+        ids_pendientes_actuales
+        and st.session_state.ultima_alerta_colaborador_ids
+        and ids_pendientes_actuales != st.session_state.ultima_alerta_colaborador_ids
+    ):
+        reproducir_alerta(
+            "🔔 Nueva solicitud",
+            f"Hay una nueva solicitud pendiente para {servicio}."
+        )
+
+    st.session_state.ultima_alerta_colaborador_ids = ids_pendientes_actuales
+    st.session_state.ultimo_total_pendientes_colaborador = len(pendientes)
 
     if colaborador["Estado"] != "Disponible":
         st.warning("Para aceptar nuevas solicitudes debe estar en estado Disponible.")
@@ -1731,14 +1873,19 @@ def pagina_panel_colaborador():
                     key=f"aceptar_{s['ID']}",
                     use_container_width=True
                 ):
-                    aceptar_solicitud(s, colaborador)
+                    aceptar_solicitud(
+                        s,
+                        colaborador
+                    )
                     st.success("Solicitud aceptada. Ahora el usuario podrá contactarlo por WhatsApp.")
                     st.rerun()
 
     st.divider()
     st.subheader("📌 Mis servicios aceptados")
 
-    aceptadas = solicitudes_colaborador(colaborador["ID"])
+    aceptadas = solicitudes_colaborador(
+        colaborador["ID"]
+    )
 
     if not aceptadas:
         st.info("Aún no tiene solicitudes aceptadas.")
@@ -1762,7 +1909,10 @@ def pagina_panel_colaborador():
 
             st.link_button(
                 "💬 Chatear con usuario por WhatsApp",
-                link_whatsapp(s["Teléfono cliente"], mensaje),
+                link_whatsapp(
+                    s["Teléfono cliente"],
+                    mensaje
+                ),
                 use_container_width=True
             )
 
@@ -1772,7 +1922,10 @@ def pagina_panel_colaborador():
                     key=f"fin_{s['ID']}",
                     use_container_width=True
                 ):
-                    finalizar_solicitud(s, colaborador)
+                    finalizar_solicitud(
+                        s,
+                        colaborador
+                    )
                     st.success("Solicitud finalizada.")
                     st.rerun()
                     # =========================================================
