@@ -922,7 +922,7 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
     )
 
     return datos
-    # =========================================================
+# =========================================================
 # PARTE 3 / 5
 # SOLICITUDES, COMPONENTES VISUALES Y FORMULARIOS
 # =========================================================
@@ -1102,6 +1102,7 @@ def promo_carousel():
 def sidebar_menu():
     """
     Menú lateral visible cuando una sesión está activa.
+    Las claves demo solo se muestran al administrador.
     """
     with st.sidebar:
         st.markdown("""
@@ -1155,15 +1156,21 @@ def sidebar_menu():
             use_container_width=True
         )
 
-        st.divider()
+        # -------------------------------------------------
+        # CLAVES DEMO
+        # Solo se muestran dentro del panel administrador.
+        # Ya no aparecen para usuarios ni colaboradores.
+        # -------------------------------------------------
+        if st.session_state.tipo == "Administrador":
+            st.divider()
 
-        st.caption("CLAVES DEMO")
-        st.write("Para colaboradores")
+            st.caption("CLAVES DEMO")
+            st.write("Para colaboradores")
 
-        for servicio, claves in CLAVES_COLABORADOR.items():
-            icono = SERVICIOS[servicio]["icono"]
-            st.write(f"**{icono} {servicio}**")
-            st.caption(f"{claves[0]} - {claves[-1]}")
+            for servicio, claves in CLAVES_COLABORADOR.items():
+                icono = SERVICIOS[servicio]["icono"]
+                st.write(f"**{icono} {servicio}**")
+                st.caption(f"{claves[0]} - {claves[-1]}")
 
         st.divider()
 
@@ -1421,7 +1428,7 @@ def formulario_registro_colaborador():
         st.session_state.tipo = "Colaborador"
         st.session_state.pagina = "panel_colaborador"
         st.rerun()
-        # =========================================================
+       # =========================================================
 # PARTE 4 / 5
 # PÁGINAS PRINCIPALES: LOGIN, USUARIO, SERVICIO Y COLABORADOR
 # =========================================================
@@ -1434,7 +1441,7 @@ def pagina_login():
     """
     Pantalla principal de ingreso.
     Mantiene las pestañas de Usuarios y Colaboradores.
-    Agrega el acceso administrador de forma discreta.
+    Corrige los espacios grandes en blanco.
     """
     hero()
 
@@ -1453,29 +1460,20 @@ def pagina_login():
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_login_usuario()
-            st.markdown('</div>', unsafe_allow_html=True)
 
         with col2:
-            st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_registro_usuario()
-            st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_login_colaborador()
-            st.markdown('</div>', unsafe_allow_html=True)
 
         with col2:
-            st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_registro_colaborador()
-            st.markdown('</div>', unsafe_allow_html=True)
 
-    # Acceso administrador discreto en la esquina derecha.
     st.markdown("<br>", unsafe_allow_html=True)
 
     col_a, col_b, col_c = st.columns([8, 1, 1])
