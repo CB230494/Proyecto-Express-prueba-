@@ -119,10 +119,6 @@ ENCABEZADOS_SOLICITUDES = [
 st.markdown("""
 <style>
 
-/* =========================================================
-   FONDO GENERAL
-   ========================================================= */
-
 :root, html, body, .stApp {
     background:
         radial-gradient(circle at top left, rgba(255, 121, 46, 0.18), transparent 34%),
@@ -135,10 +131,6 @@ st.markdown("""
 [data-testid="stHeader"] {
     background: transparent !important;
 }
-
-/* =========================================================
-   SIDEBAR OSCURO MODERNO
-   ========================================================= */
 
 [data-testid="stSidebar"] {
     background:
@@ -172,10 +164,6 @@ st.markdown("""
     border: 1px solid transparent !important;
 }
 
-/* =========================================================
-   TEXTOS GENERALES
-   ========================================================= */
-
 h1, h2, h3, h4, h5, h6, p, label, span, div {
     color: #111827;
 }
@@ -187,10 +175,6 @@ h1 {
 p {
     line-height: 1.45;
 }
-
-/* =========================================================
-   INPUTS Y FORMULARIOS
-   ========================================================= */
 
 input, textarea, select {
     border-radius: 14px !important;
@@ -211,10 +195,6 @@ input, textarea, select {
     border: 1px solid #fb923c !important;
     box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.18) !important;
 }
-
-/* =========================================================
-   BOTONES GENERALES
-   ========================================================= */
 
 .stButton > button,
 .stFormSubmitButton > button {
@@ -246,10 +226,6 @@ input, textarea, select {
     box-shadow: 0 14px 26px rgba(34, 197, 94, 0.22) !important;
 }
 
-/* =========================================================
-   HERO PRINCIPAL
-   ========================================================= */
-
 .hero {
     padding: 34px 30px 28px 30px;
     border-radius: 0;
@@ -279,10 +255,6 @@ input, textarea, select {
     font-weight: 500;
 }
 
-/* =========================================================
-   TARJETAS PRINCIPALES
-   ========================================================= */
-
 .card {
     background: rgba(255,255,255,0.88);
     border: 1px solid rgba(226, 232, 240, 0.95);
@@ -302,10 +274,6 @@ input, textarea, select {
     box-shadow: 0 20px 42px rgba(15, 23, 42, 0.06);
     backdrop-filter: blur(12px);
 }
-
-/* =========================================================
-   TARJETAS DE SERVICIO
-   ========================================================= */
 
 .service-card {
     border-radius: 26px;
@@ -332,10 +300,6 @@ input, textarea, select {
     font-size: 15px;
     line-height: 1.35;
 }
-
-/* =========================================================
-   PROMOCIONES
-   ========================================================= */
 
 .promo-carousel {
     height: 168px;
@@ -371,10 +335,6 @@ input, textarea, select {
     50% {background-position: 100% 50%;}
     100% {background-position: 0% 50%;}
 }
-
-/* =========================================================
-   BADGES DE ESTADO
-   ========================================================= */
 
 .badge {
     display: inline-block;
@@ -414,10 +374,6 @@ input, textarea, select {
     color: #166534 !important;
 }
 
-/* =========================================================
-   BOTÓN ADMINISTRADOR
-   ========================================================= */
-
 .admin-button-wrapper button {
     width: 100% !important;
     min-width: 190px !important;
@@ -430,10 +386,6 @@ input, textarea, select {
     font-size: 14px !important;
     line-height: 1 !important;
 }
-
-/* =========================================================
-   ALERTAS VISUALES
-   ========================================================= */
 
 .alerta-sonido-box {
     background: linear-gradient(135deg, #f97316, #ef4444);
@@ -451,10 +403,6 @@ input, textarea, select {
     margin: 0;
 }
 
-/* =========================================================
-   MÉTRICAS Y TABLAS
-   ========================================================= */
-
 [data-testid="stMetric"] {
     background: rgba(255,255,255,0.82);
     border: 1px solid rgba(226,232,240,0.9);
@@ -468,18 +416,10 @@ input, textarea, select {
     overflow: hidden;
 }
 
-/* =========================================================
-   PEQUEÑAS NOTAS
-   ========================================================= */
-
 .small-note {
     color: #6b7280 !important;
     font-size: 14px;
 }
-
-/* =========================================================
-   RESPONSIVE
-   ========================================================= */
 
 @media(max-width: 768px) {
     .hero h1 {
@@ -533,45 +473,56 @@ def conectar_google_sheets():
     return cliente.open_by_url(SPREADSHEET_URL)
 
 
+@st.cache_resource(show_spinner=False)
+def obtener_hoja_cache(nombre):
+    """
+    Obtiene una hoja desde Google Sheets usando caché.
+    Esto evita pedir metadata a Google en cada refresco.
+    """
+    libro = conectar_google_sheets()
+    return libro.worksheet(nombre)
+
+
 def obtener_hoja(nombre, encabezados):
     """
     Obtiene una hoja específica del archivo de Google Sheets.
     Si la hoja no existe, la crea automáticamente.
-    Si la hoja existe pero no tiene encabezados correctos, los corrige.
     """
     libro = conectar_google_sheets()
 
     try:
-        hoja = libro.worksheet(nombre)
+        hoja = obtener_hoja_cache(nombre)
     except gspread.WorksheetNotFound:
         hoja = libro.add_worksheet(
             title=nombre,
             rows=200,
             cols=len(encabezados) + 3
         )
+        st.cache_resource.clear()
 
     valores = hoja.get_all_values()
 
     if not valores:
         hoja.append_row(encabezados)
+        st.cache_data.clear()
     else:
         primera = valores[0]
 
         if primera[:len(encabezados)] != encabezados:
             hoja.clear()
             hoja.append_row(encabezados)
+            st.cache_data.clear()
 
     return hoja
 
 
-def leer_registros(nombre, encabezados):
+@st.cache_data(ttl=30, show_spinner=False)
+def leer_registros_cache(nombre, encabezados_tuple):
     """
-    Lee todos los registros de una hoja y los devuelve como
-    una lista de diccionarios.
-
-    También agrega el campo interno _fila para poder editar
-    o eliminar registros específicos.
+    Lee registros con caché temporal para no saturar Google Sheets.
+    ttl=30 significa que reutiliza los datos por 30 segundos.
     """
+    encabezados = list(encabezados_tuple)
     hoja = obtener_hoja(nombre, encabezados)
     filas = hoja.get_all_values()
 
@@ -589,9 +540,17 @@ def leer_registros(nombre, encabezados):
     return registros
 
 
+def leer_registros(nombre, encabezados):
+    """
+    Lee todos los registros usando caché.
+    """
+    return leer_registros_cache(nombre, tuple(encabezados))
+
+
 def agregar_registro(nombre, encabezados, datos):
     """
     Agrega un nuevo registro al final de la hoja indicada.
+    Luego limpia caché para que el dato nuevo se vea.
     """
     hoja = obtener_hoja(nombre, encabezados)
     fila = [datos.get(campo, "") for campo in encabezados]
@@ -601,10 +560,13 @@ def agregar_registro(nombre, encabezados, datos):
         value_input_option="USER_ENTERED"
     )
 
+    st.cache_data.clear()
+
 
 def actualizar_celda(nombre, encabezados, fila, columna, valor):
     """
     Actualiza una sola celda según la fila y el nombre de columna.
+    Luego limpia caché.
     """
     hoja = obtener_hoja(nombre, encabezados)
     indice_columna = encabezados.index(columna) + 1
@@ -615,14 +577,13 @@ def actualizar_celda(nombre, encabezados, fila, columna, valor):
         valor
     )
 
+    st.cache_data.clear()
+
 
 def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
     """
     Actualiza varias columnas de una misma fila.
-    El parámetro cambios debe venir como diccionario:
-    {
-        "Nombre columna": "nuevo valor"
-    }
+    Luego limpia caché.
     """
     hoja = obtener_hoja(nombre, encabezados)
 
@@ -634,15 +595,18 @@ def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
             valor
         )
 
+    st.cache_data.clear()
+
 
 def eliminar_fila(nombre, encabezados, fila):
     """
     Elimina una fila completa de una hoja.
-    Se usa en el panel administrador para eliminar usuarios
-    y colaboradores.
+    Luego limpia caché.
     """
     hoja = obtener_hoja(nombre, encabezados)
     hoja.delete_rows(int(fila))
+
+    st.cache_data.clear()
 
 
 # =========================================================
@@ -652,7 +616,6 @@ def eliminar_fila(nombre, encabezados, fila):
 def normalizar_usuario(texto):
     """
     Convierte el usuario a minúsculas y elimina espacios.
-    Esto evita duplicados por mayúsculas/minúsculas.
     """
     return str(texto).strip().lower()
 
@@ -674,7 +637,6 @@ def limpiar_telefono(texto):
 def telefono_whatsapp_cr(texto):
     """
     Convierte cualquier número nacional en formato WhatsApp Costa Rica.
-    Si ya trae 506, lo conserva.
     """
     numero = limpiar_telefono(texto)
 
@@ -753,8 +715,7 @@ def badge_estado(estado):
 def inicializar_estado():
     """
     Inicializa las variables principales de sesión.
-    Estas variables controlan qué pantalla ve cada persona.
-    También inicializa variables de alertas internas.
+    También inicializa variables para alertas internas.
     """
     valores = {
         "pagina": "login",
@@ -834,8 +795,6 @@ def total_colaboradores_servicio(servicio):
 def buscar_usuario_login(nombre_usuario, clave):
     """
     Busca un usuario cliente por usuario y clave.
-    El usuario no distingue mayúsculas/minúsculas.
-    La clave sí se compara exactamente.
     """
     usuario_n = normalizar_usuario(nombre_usuario)
     clave_limpia = limpiar_texto(clave)
@@ -1093,6 +1052,10 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
     if not st.session_state.get("alertas_activadas", True):
         return
 
+    if not st.session_state.get("sonido_habilitado", False):
+        st.toast(mensaje)
+        return
+
     st.markdown(f"""
     <div class="alerta-sonido-box">
         <h3>{titulo}</h3>
@@ -1107,13 +1070,13 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
 
         oscillator.type = "sine";
         oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.30, audioCtx.currentTime);
 
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
 
         oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.45);
+        oscillator.stop(audioCtx.currentTime + 0.50);
     }} catch (e) {{
         console.log("No se pudo reproducir sonido:", e);
     }}
@@ -1136,11 +1099,29 @@ def boton_activar_sonido():
         if st.button("🔊 Activar alertas sonoras", use_container_width=True):
             st.session_state.sonido_habilitado = True
 
-            reproducir_alerta(
-                "🔊 Alertas activadas",
-                "Las notificaciones sonoras quedaron activadas en este dispositivo."
-            )
+            st.markdown("""
+            <script>
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
 
+                oscillator.type = "sine";
+                oscillator.frequency.setValueAtTime(720, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.35, audioCtx.currentTime);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.35);
+            } catch (e) {
+                console.log("No se pudo activar sonido:", e);
+            }
+            </script>
+            """, unsafe_allow_html=True)
+
+            st.success("🔊 Alertas sonoras activadas en este dispositivo.")
             st.rerun()
     else:
         st.success("🔊 Alertas sonoras activadas en este dispositivo.")
@@ -1148,13 +1129,12 @@ def boton_activar_sonido():
 
 def activar_refresco_automatico():
     """
-    Refresca automáticamente la app cada cierto tiempo
-    para revisar cambios en solicitudes.
+    Refresca automáticamente la app para revisar cambios en solicitudes.
 
-    15000 milisegundos = 15 segundos.
+    Se usa 60000 milisegundos = 60 segundos para no saturar Google Sheets.
     """
     st_autorefresh(
-        interval=15000,
+        interval=60000,
         key="refresco_automatico_notificaciones"
     )
 
