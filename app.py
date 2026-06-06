@@ -976,16 +976,41 @@ def actualizar_estado_colaborador(colaborador, nuevo_estado):
     """
     Cambia el estado de un colaborador:
     Disponible, Ocupado o Fuera de servicio.
+
+    Corrección:
+    Si el colaborador guardado en sesión no trae _fila,
+    se vuelve a buscar en Google Sheets por ID.
     """
+    fila_colaborador = colaborador.get("_fila")
+
+    if not fila_colaborador:
+        colaboradores = leer_registros(
+            HOJA_COLABORADORES,
+            ENCABEZADOS_COLABORADORES
+        )
+
+        encontrado = next(
+            (c for c in colaboradores if c["ID"] == colaborador["ID"]),
+            None
+        )
+
+        if not encontrado:
+            st.error("No se pudo encontrar el colaborador en la base de datos.")
+            return
+
+        fila_colaborador = encontrado["_fila"]
+        colaborador.update(encontrado)
+
     actualizar_celda(
         HOJA_COLABORADORES,
         ENCABEZADOS_COLABORADORES,
-        int(colaborador["_fila"]),
+        int(fila_colaborador),
         "Estado",
         nuevo_estado
     )
 
     colaborador["Estado"] = nuevo_estado
+    colaborador["_fila"] = fila_colaborador
     st.session_state.colaborador_actual = colaborador
 
 
@@ -1045,7 +1070,6 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
     """
     Muestra alerta visual y reproduce sonido dentro del navegador.
 
-    Nota:
     Para que el navegador permita sonido, primero se debe presionar
     el botón 'Activar alertas sonoras' en el dispositivo.
     """
@@ -1089,9 +1113,6 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
 def boton_activar_sonido():
     """
     Botón obligatorio para habilitar sonido en el navegador.
-
-    Chrome, Edge y otros navegadores suelen bloquear sonidos automáticos
-    hasta que la persona interactúa con la página.
     """
     if not st.session_state.get("sonido_habilitado", False):
         st.info("🔊 Para escuchar notificaciones, active el sonido en este dispositivo.")
@@ -1130,8 +1151,7 @@ def boton_activar_sonido():
 def activar_refresco_automatico():
     """
     Refresca automáticamente la app para revisar cambios en solicitudes.
-
-    Se usa 60000 milisegundos = 60 segundos para no saturar Google Sheets.
+    60000 milisegundos = 60 segundos.
     """
     st_autorefresh(
         interval=60000,
