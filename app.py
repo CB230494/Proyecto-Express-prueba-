@@ -1428,22 +1428,46 @@ def formulario_registro_colaborador():
         st.session_state.tipo = "Colaborador"
         st.session_state.pagina = "panel_colaborador"
         st.rerun()
-       # =========================================================
+# =========================================================
 # PARTE 4 / 5
 # PÁGINAS PRINCIPALES: LOGIN, USUARIO, SERVICIO Y COLABORADOR
-# =========================================================
-
-# =========================================================
-# PÁGINA LOGIN PRINCIPAL
 # =========================================================
 
 def pagina_login():
     """
     Pantalla principal de ingreso.
     Mantiene las pestañas de Usuarios y Colaboradores.
-    Corrige los espacios grandes en blanco.
+    Corrige los espacios grandes en blanco y el botón administrador.
     """
     hero()
+
+    st.markdown("""
+    <style>
+    .admin-button-wrapper button {
+        width: auto !important;
+        min-width: 120px !important;
+        max-width: 150px !important;
+        min-height: 32px !important;
+        padding: 4px 12px !important;
+        border-radius: 999px !important;
+        background: transparent !important;
+        color: #64748b !important;
+        box-shadow: none !important;
+        border: none !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+        line-height: 1 !important;
+    }
+
+    .admin-button-wrapper button:hover {
+        color: #fb4b18 !important;
+        background: rgba(251, 75, 24, 0.08) !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     st.markdown("""
     <div class="card" style="text-align:center; max-width: 980px; margin: 0 auto 24px auto;">
@@ -1476,9 +1500,9 @@ def pagina_login():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_a, col_b, col_c = st.columns([8, 1, 1])
+    col_a, col_b = st.columns([9, 1])
 
-    with col_c:
+    with col_b:
         st.markdown('<div class="admin-button-wrapper">', unsafe_allow_html=True)
 
         if st.button("administrador", key="btn_admin_oculto"):
@@ -1487,10 +1511,6 @@ def pagina_login():
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-
-# =========================================================
-# PÁGINA PANEL DE USUARIO
-# =========================================================
 
 def pagina_panel_usuario():
     """
@@ -1564,10 +1584,6 @@ def pagina_panel_usuario():
                     use_container_width=True
                 )
 
-
-# =========================================================
-# PÁGINA SERVICIO SELECCIONADO POR USUARIO
-# =========================================================
 
 def pagina_servicio_usuario():
     """
@@ -1672,10 +1688,6 @@ def pagina_servicio_usuario():
         st.session_state.pagina = "panel_usuario"
         st.rerun()
 
-
-# =========================================================
-# PÁGINA PANEL DE COLABORADOR
-# =========================================================
 
 def pagina_panel_colaborador():
     """
