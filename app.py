@@ -12,6 +12,7 @@ import uuid
 import re
 from urllib.parse import quote
 from streamlit_autorefresh import st_autorefresh
+import streamlit.components.v1 as components
 
 # =========================================================
 # CONFIGURACIÓN GENERAL DE STREAMLIT
@@ -895,10 +896,6 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
 # SOLICITUDES, COMPONENTES VISUALES, ALERTAS Y FORMULARIOS
 # =========================================================
 
-# =========================================================
-# FUNCIONES DE SOLICITUDES
-# =========================================================
-
 def crear_solicitud(servicio, usuario, detalle):
     """
     Crea una nueva solicitud de servicio hecha por un usuario.
@@ -943,7 +940,9 @@ def solicitudes_usuario(usuario_id):
 
 def solicitudes_pendientes_servicio(servicio):
     """
-    Devuelve las solicitudes pendientes de un servicio específico.
+    Devuelve solo las solicitudes pendientes de un servicio.
+    Si una solicitud ya fue aceptada por otro colaborador,
+    ya no aparece para los demás.
     """
     solicitudes = leer_registros(
         HOJA_SOLICITUDES,
@@ -974,12 +973,10 @@ def solicitudes_colaborador(colaborador_id):
 
 def actualizar_estado_colaborador(colaborador, nuevo_estado):
     """
-    Cambia el estado de un colaborador:
-    Disponible, Ocupado o Fuera de servicio.
+    Cambia el estado de un colaborador.
 
-    Corrección:
     Si el colaborador guardado en sesión no trae _fila,
-    se vuelve a buscar en Google Sheets por ID.
+    lo vuelve a buscar por ID para evitar errores.
     """
     fila_colaborador = colaborador.get("_fila")
 
@@ -996,7 +993,7 @@ def actualizar_estado_colaborador(colaborador, nuevo_estado):
 
         if not encontrado:
             st.error("No se pudo encontrar el colaborador en la base de datos.")
-            return
+            return False
 
         fila_colaborador = encontrado["_fila"]
         colaborador.update(encontrado)
@@ -1013,12 +1010,35 @@ def actualizar_estado_colaborador(colaborador, nuevo_estado):
     colaborador["_fila"] = fila_colaborador
     st.session_state.colaborador_actual = colaborador
 
+    return True
+
 
 def aceptar_solicitud(solicitud, colaborador):
     """
-    Permite que un colaborador acepte una solicitud pendiente.
-    También cambia el estado del colaborador a Ocupado.
+    Acepta una solicitud pendiente.
+
+    Blindaje:
+    Antes de aceptar, vuelve a leer la solicitud desde Google Sheets.
+    Si otro colaborador ya la aceptó, bloquea la acción.
     """
+    solicitudes_actuales = leer_registros(
+        HOJA_SOLICITUDES,
+        ENCABEZADOS_SOLICITUDES
+    )
+
+    solicitud_actual = next(
+        (s for s in solicitudes_actuales if s["ID"] == solicitud["ID"]),
+        None
+    )
+
+    if not solicitud_actual:
+        st.error("La solicitud ya no existe.")
+        return False
+
+    if solicitud_actual["Estado"] != "Pendiente":
+        st.warning("Esta solicitud ya fue aceptada por otro colaborador.")
+        return False
+
     nombre_colaborador = (
         f'{colaborador["Nombre"]} '
         f'{colaborador["Primer apellido"]} '
@@ -1028,7 +1048,7 @@ def aceptar_solicitud(solicitud, colaborador):
     actualizar_varias_celdas(
         HOJA_SOLICITUDES,
         ENCABEZADOS_SOLICITUDES,
-        int(solicitud["_fila"]),
+        int(solicitud_actual["_fila"]),
         {
             "Estado": "Aceptado",
             "Colaborador ID": colaborador["ID"],
@@ -1041,6 +1061,8 @@ def aceptar_solicitud(solicitud, colaborador):
         colaborador,
         "Ocupado"
     )
+
+    return True
 
 
 def finalizar_solicitud(solicitud, colaborador):
@@ -1063,21 +1085,121 @@ def finalizar_solicitud(solicitud, colaborador):
 
 
 # =========================================================
-# FUNCIONES DE ALERTA SONORA Y VISUAL
+# ALERTAS SONORAS / VISUALES
 # =========================================================
+
+def boton_activar_sonido():
+    """
+    Muestra un botón real en HTML para desbloquear sonido,
+    notificaciones del navegador y vibración si el dispositivo lo permite.
+    """
+    components.html("""
+    <div style="
+        background:#fff7ed;
+        border:1px solid #fed7aa;
+        border-radius:18px;
+        padding:14px 16px;
+        margin-bottom:14px;
+        font-family:Arial, sans-serif;
+    ">
+        <div style="font-weight:800; color:#9a3412; margin-bottom:8px;">
+            🔊 Alertas del dispositivo
+        </div>
+
+        <button onclick="activarAlertasExpress()" style="
+            background:linear-gradient(135deg,#f97316,#ef4444);
+            color:white;
+            border:none;
+            border-radius:999px;
+            padding:10px 18px;
+            font-weight:800;
+            cursor:pointer;
+            width:100%;
+        ">
+            🔊 Activar sonido y notificaciones
+        </button>
+
+        <div id="estado_alerta_express" style="
+            margin-top:8px;
+            color:#7c2d12;
+            font-size:13px;
+        ">
+            Presione el botón una vez en este dispositivo.
+        </div>
+    </div>
+
+    <script>
+    window.expressAudioReady = window.expressAudioReady || false;
+
+    function beepExpress() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const audioCtx = new AudioContext();
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.type = "square";
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.35, audioCtx.currentTime);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.45);
+
+            setTimeout(() => {
+                try {
+                    const oscillator2 = audioCtx.createOscillator();
+                    const gainNode2 = audioCtx.createGain();
+
+                    oscillator2.type = "square";
+                    oscillator2.frequency.setValueAtTime(1040, audioCtx.currentTime);
+                    gainNode2.gain.setValueAtTime(0.35, audioCtx.currentTime);
+
+                    oscillator2.connect(gainNode2);
+                    gainNode2.connect(audioCtx.destination);
+
+                    oscillator2.start();
+                    oscillator2.stop(audioCtx.currentTime + 0.45);
+                } catch (e) {}
+            }, 520);
+
+        } catch (e) {
+            console.log("Error de sonido:", e);
+        }
+    }
+
+    async function activarAlertasExpress() {
+        localStorage.setItem("express_alertas_activas", "1");
+        window.expressAudioReady = true;
+
+        beepExpress();
+
+        if ("Notification" in window) {
+            try {
+                await Notification.requestPermission();
+            } catch (e) {}
+        }
+
+        if (navigator.vibrate) {
+            navigator.vibrate([250, 120, 250]);
+        }
+
+        document.getElementById("estado_alerta_express").innerHTML =
+            "✅ Alertas activadas. Mantenga la app abierta para recibir avisos.";
+    }
+    </script>
+    """, height=145)
+
 
 def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actualización nueva en la app."):
     """
-    Muestra alerta visual y reproduce sonido dentro del navegador.
-
-    Para que el navegador permita sonido, primero se debe presionar
-    el botón 'Activar alertas sonoras' en el dispositivo.
+    Dispara alerta visual, sonido, vibración y notificación del navegador.
+    Funciona mientras la app esté abierta.
     """
     if not st.session_state.get("alertas_activadas", True):
-        return
-
-    if not st.session_state.get("sonido_habilitado", False):
-        st.toast(mensaje)
         return
 
     st.markdown(f"""
@@ -1085,73 +1207,72 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
         <h3>{titulo}</h3>
         <p>{mensaje}</p>
     </div>
+    """, unsafe_allow_html=True)
 
+    components.html(f"""
     <script>
-    try {{
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
+    function beepExpressNow() {{
+        try {{
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const audioCtx = new AudioContext();
 
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.30, audioCtx.currentTime);
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+            oscillator.type = "square";
+            oscillator.frequency.setValueAtTime(950, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.40, audioCtx.currentTime);
 
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.50);
-    }} catch (e) {{
-        console.log("No se pudo reproducir sonido:", e);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.55);
+
+            setTimeout(() => {{
+                try {{
+                    const oscillator2 = audioCtx.createOscillator();
+                    const gainNode2 = audioCtx.createGain();
+
+                    oscillator2.type = "square";
+                    oscillator2.frequency.setValueAtTime(1150, audioCtx.currentTime);
+                    gainNode2.gain.setValueAtTime(0.40, audioCtx.currentTime);
+
+                    oscillator2.connect(gainNode2);
+                    gainNode2.connect(audioCtx.destination);
+
+                    oscillator2.start();
+                    oscillator2.stop(audioCtx.currentTime + 0.55);
+                }} catch(e) {{}}
+            }}, 650);
+
+        }} catch(e) {{
+            console.log("No se pudo reproducir sonido:", e);
+        }}
+    }}
+
+    beepExpressNow();
+
+    if (navigator.vibrate) {{
+        navigator.vibrate([400, 160, 400, 160, 400]);
+    }}
+
+    if ("Notification" in window && Notification.permission === "granted") {{
+        new Notification("{titulo}", {{
+            body: "{mensaje}",
+            icon: "https://cdn-icons-png.flaticon.com/512/1046/1046784.png"
+        }});
     }}
     </script>
-    """, unsafe_allow_html=True)
+    """, height=0)
 
     st.toast(mensaje)
 
 
-def boton_activar_sonido():
-    """
-    Botón obligatorio para habilitar sonido en el navegador.
-    """
-    if not st.session_state.get("sonido_habilitado", False):
-        st.info("🔊 Para escuchar notificaciones, active el sonido en este dispositivo.")
-
-        if st.button("🔊 Activar alertas sonoras", use_container_width=True):
-            st.session_state.sonido_habilitado = True
-
-            st.markdown("""
-            <script>
-            try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-
-                oscillator.type = "sine";
-                oscillator.frequency.setValueAtTime(720, audioCtx.currentTime);
-                gainNode.gain.setValueAtTime(0.35, audioCtx.currentTime);
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.35);
-            } catch (e) {
-                console.log("No se pudo activar sonido:", e);
-            }
-            </script>
-            """, unsafe_allow_html=True)
-
-            st.success("🔊 Alertas sonoras activadas en este dispositivo.")
-            st.rerun()
-    else:
-        st.success("🔊 Alertas sonoras activadas en este dispositivo.")
-
-
 def activar_refresco_automatico():
     """
-    Refresca automáticamente la app para revisar cambios en solicitudes.
-    60000 milisegundos = 60 segundos.
+    Refresca automáticamente la app para revisar cambios.
+    Se mantiene en 60 segundos para no saturar Google Sheets.
     """
     st_autorefresh(
         interval=60000,
@@ -1164,9 +1285,6 @@ def activar_refresco_automatico():
 # =========================================================
 
 def hero():
-    """
-    Encabezado visual principal de la app.
-    """
     st.markdown("""
     <div class="hero">
         <h1>🛵 Express <span>Local</span></h1>
@@ -1176,9 +1294,6 @@ def hero():
 
 
 def promo_carousel():
-    """
-    Banner visual de promociones o información destacada.
-    """
     st.markdown("""
     <div class="promo-carousel">
         <div>
@@ -1190,10 +1305,6 @@ def promo_carousel():
 
 
 def sidebar_menu():
-    """
-    Menú lateral visible cuando una sesión está activa.
-    Las claves demo solo se muestran al administrador.
-    """
     with st.sidebar:
         st.markdown("""
         <div style="padding: 10px 0 20px 0;">
@@ -1220,13 +1331,10 @@ def sidebar_menu():
         if st.button("🏠 Inicio", use_container_width=True):
             if st.session_state.tipo == "Usuario":
                 st.session_state.pagina = "panel_usuario"
-
             elif st.session_state.tipo == "Colaborador":
                 st.session_state.pagina = "panel_colaborador"
-
             elif st.session_state.tipo == "Administrador":
                 st.session_state.pagina = "panel_admin"
-
             else:
                 st.session_state.pagina = "login"
 
@@ -1248,7 +1356,6 @@ def sidebar_menu():
 
         if st.session_state.tipo == "Administrador":
             st.divider()
-
             st.caption("CLAVES DEMO")
             st.write("Para colaboradores")
 
@@ -1269,53 +1376,31 @@ def sidebar_menu():
 # =========================================================
 
 def formulario_login_usuario():
-    """
-    Formulario para que un usuario registrado pueda ingresar.
-    """
     st.markdown("""
     <h3>🚪 Ingreso de usuario</h3>
     <p class="small-note">Ingresa con tu usuario y contraseña para solicitar servicios.</p>
     """, unsafe_allow_html=True)
 
     with st.form("form_login_usuario"):
-        usuario = st.text_input(
-            "Nombre de usuario",
-            key="login_user_user"
-        )
-
-        clave = st.text_input(
-            "Clave",
-            type="password",
-            key="login_user_pass"
-        )
-
-        ingresar = st.form_submit_button(
-            "Ingresar como usuario"
-        )
+        usuario = st.text_input("Nombre de usuario", key="login_user_user")
+        clave = st.text_input("Clave", type="password", key="login_user_pass")
+        ingresar = st.form_submit_button("Ingresar como usuario")
 
     if ingresar:
-        encontrado = buscar_usuario_login(
-            usuario,
-            clave
-        )
+        encontrado = buscar_usuario_login(usuario, clave)
 
         if encontrado:
             st.session_state.usuario_actual = encontrado
             st.session_state.tipo = "Usuario"
             st.session_state.pagina = "panel_usuario"
-
             st.session_state.ultimo_total_aceptadas_usuario = 0
             st.session_state.ultima_alerta_usuario_ids = ""
-
             st.rerun()
         else:
             st.error("Usuario o clave incorrecta.")
 
 
 def formulario_registro_usuario():
-    """
-    Formulario para registrar un nuevo usuario cliente.
-    """
     st.markdown("""
     <h3>👤 Registro nuevo de usuario</h3>
     <p class="small-note">Crea tu cuenta como usuario para comenzar.</p>
@@ -1337,22 +1422,17 @@ def formulario_registro_usuario():
 
         telefono = st.text_input("Número de teléfono Costa Rica")
         usuario = st.text_input("Nombre de usuario")
-
         clave = st.text_input(
             "Clave",
             type="password",
             help="Puede usar números, mayúsculas y minúsculas."
         )
 
-        guardar = st.form_submit_button(
-            "Registrarme como usuario"
-        )
+        guardar = st.form_submit_button("Registrarme como usuario")
 
     if guardar:
         if total_usuarios_registrados() >= LIMITE_USUARIOS_DEMO:
-            st.error(
-                f"El demo permite registrar máximo {LIMITE_USUARIOS_DEMO} usuarios."
-            )
+            st.error(f"El demo permite registrar máximo {LIMITE_USUARIOS_DEMO} usuarios.")
             return
 
         if not all([nombre, apellido1, apellido2, telefono, usuario, clave]):
@@ -1363,24 +1443,14 @@ def formulario_registro_usuario():
             st.error("Ese nombre de usuario ya existe. Use otro.")
             return
 
-        nuevo = registrar_usuario(
-            nombre,
-            apellido1,
-            apellido2,
-            telefono,
-            usuario,
-            clave
-        )
+        nuevo = registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave)
 
         st.success("Usuario creado correctamente. Ya puede ingresar.")
-
         st.session_state.usuario_actual = nuevo
         st.session_state.tipo = "Usuario"
         st.session_state.pagina = "panel_usuario"
-
         st.session_state.ultimo_total_aceptadas_usuario = 0
         st.session_state.ultima_alerta_usuario_ids = ""
-
         st.rerun()
 
 
@@ -1389,61 +1459,37 @@ def formulario_registro_usuario():
 # =========================================================
 
 def formulario_login_colaborador():
-    """
-    Formulario para que un colaborador registrado pueda ingresar.
-    """
     st.markdown("""
     <h3>🛠️ Ingreso de colaborador</h3>
     <p class="small-note">Ingresa con tus credenciales para aceptar solicitudes.</p>
     """, unsafe_allow_html=True)
 
     with st.form("form_login_colaborador"):
-        usuario = st.text_input(
-            "Nombre de usuario",
-            key="login_col_user"
-        )
-
-        clave = st.text_input(
-            "Clave",
-            type="password",
-            key="login_col_pass"
-        )
-
-        ingresar = st.form_submit_button(
-            "Ingresar como colaborador"
-        )
+        usuario = st.text_input("Nombre de usuario", key="login_col_user")
+        clave = st.text_input("Clave", type="password", key="login_col_pass")
+        ingresar = st.form_submit_button("Ingresar como colaborador")
 
     if ingresar:
-        encontrado = buscar_colaborador_login(
-            usuario,
-            clave
-        )
+        encontrado = buscar_colaborador_login(usuario, clave)
 
         if encontrado:
             st.session_state.colaborador_actual = encontrado
             st.session_state.tipo = "Colaborador"
             st.session_state.pagina = "panel_colaborador"
-
             st.session_state.ultimo_total_pendientes_colaborador = 0
             st.session_state.ultima_alerta_colaborador_ids = ""
-
             st.rerun()
         else:
             st.error("Usuario o clave incorrecta.")
 
 
 def formulario_registro_colaborador():
-    """
-    Formulario para registrar un nuevo colaborador o trabajador.
-    """
     st.markdown("""
     <h3>🧰 Registro nuevo de colaborador</h3>
     <p class="small-note">Regístrate como colaborador para brindar servicios.</p>
     """, unsafe_allow_html=True)
 
-    st.caption(
-        f"Demo: máximo {LIMITE_COLABORADORES_POR_SERVICIO} colaboradores por servicio."
-    )
+    st.caption(f"Demo: máximo {LIMITE_COLABORADORES_POR_SERVICIO} colaboradores por servicio.")
 
     with st.form("form_registro_colaborador"):
         c1, c2, c3 = st.columns(3)
@@ -1457,26 +1503,10 @@ def formulario_registro_colaborador():
         with c3:
             apellido2 = st.text_input("Segundo apellido", key="col_ap2")
 
-        telefono = st.text_input(
-            "Número de teléfono Costa Rica",
-            key="col_tel"
-        )
-
-        servicio = st.selectbox(
-            "Servicio que brindará",
-            list(SERVICIOS.keys())
-        )
-
-        codigo = st.text_input(
-            "Clave autorizada por el coordinador",
-            type="password"
-        )
-
-        usuario = st.text_input(
-            "Nombre de usuario",
-            key="col_user"
-        )
-
+        telefono = st.text_input("Número de teléfono Costa Rica", key="col_tel")
+        servicio = st.selectbox("Servicio que brindará", list(SERVICIOS.keys()))
+        codigo = st.text_input("Clave autorizada por el coordinador", type="password")
+        usuario = st.text_input("Nombre de usuario", key="col_user")
         clave = st.text_input(
             "Clave personal",
             type="password",
@@ -1484,9 +1514,7 @@ def formulario_registro_colaborador():
             key="col_pass"
         )
 
-        guardar = st.form_submit_button(
-            "Registrarme como colaborador"
-        )
+        guardar = st.form_submit_button("Registrarme como colaborador")
 
     if guardar:
         if not all([nombre, apellido1, apellido2, telefono, servicio, codigo, usuario, clave]):
@@ -1494,40 +1522,25 @@ def formulario_registro_colaborador():
             return
 
         if codigo.strip() not in CLAVES_COLABORADOR[servicio]:
-            st.error(
-                "La clave del coordinador no corresponde al servicio seleccionado."
-            )
+            st.error("La clave del coordinador no corresponde al servicio seleccionado.")
             return
 
         if total_colaboradores_servicio(servicio) >= LIMITE_COLABORADORES_POR_SERVICIO:
-            st.error(
-                f"Ya existen {LIMITE_COLABORADORES_POR_SERVICIO} colaboradores registrados para {servicio}."
-            )
+            st.error(f"Ya existen {LIMITE_COLABORADORES_POR_SERVICIO} colaboradores registrados para {servicio}.")
             return
 
         if usuario_existe(usuario):
             st.error("Ese nombre de usuario ya existe. Use otro.")
             return
 
-        nuevo = registrar_colaborador(
-            nombre,
-            apellido1,
-            apellido2,
-            telefono,
-            usuario,
-            clave,
-            servicio
-        )
+        nuevo = registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave, servicio)
 
         st.success("Colaborador creado correctamente.")
-
         st.session_state.colaborador_actual = nuevo
         st.session_state.tipo = "Colaborador"
         st.session_state.pagina = "panel_colaborador"
-
         st.session_state.ultimo_total_pendientes_colaborador = 0
         st.session_state.ultima_alerta_colaborador_ids = ""
-
         st.rerun()
 # =========================================================
 # PARTE 4 / 5
@@ -1862,17 +1875,23 @@ def pagina_panel_colaborador():
         st.write("")
 
         if st.button("Actualizar estado", use_container_width=True):
-            actualizar_estado_colaborador(
+            actualizado = actualizar_estado_colaborador(
                 colaborador,
                 nuevo_estado
             )
-            st.success("Estado actualizado.")
-            st.rerun()
+
+            if actualizado:
+                st.success("Estado actualizado.")
+                st.rerun()
 
     st.divider()
     st.subheader("🔔 Solicitudes pendientes para mi servicio")
 
-    pendientes = solicitudes_pendientes_servicio(servicio)
+    if colaborador["Estado"] != "Disponible":
+        st.warning("Para aceptar nuevas solicitudes debe estar en estado Disponible.")
+        pendientes = []
+    else:
+        pendientes = solicitudes_pendientes_servicio(servicio)
 
     ids_pendientes_actuales = ",".join(
         sorted([s["ID"] for s in pendientes])
@@ -1891,9 +1910,6 @@ def pagina_panel_colaborador():
     st.session_state.ultima_alerta_colaborador_ids = ids_pendientes_actuales
     st.session_state.ultimo_total_pendientes_colaborador = len(pendientes)
 
-    if colaborador["Estado"] != "Disponible":
-        st.warning("Para aceptar nuevas solicitudes debe estar en estado Disponible.")
-
     if not pendientes:
         st.info("No hay solicitudes pendientes para este servicio.")
     else:
@@ -1908,18 +1924,21 @@ def pagina_panel_colaborador():
             </div>
             """, unsafe_allow_html=True)
 
-            if colaborador["Estado"] == "Disponible":
-                if st.button(
-                    f"✅ Aceptar solicitud #{s['ID']}",
-                    key=f"aceptar_{s['ID']}",
-                    use_container_width=True
-                ):
-                    aceptar_solicitud(
-                        s,
-                        colaborador
-                    )
+            if st.button(
+                f"✅ Aceptar solicitud #{s['ID']}",
+                key=f"aceptar_{s['ID']}",
+                use_container_width=True
+            ):
+                aceptada = aceptar_solicitud(
+                    s,
+                    colaborador
+                )
+
+                if aceptada:
                     st.success("Solicitud aceptada. Ahora el usuario podrá contactarlo por WhatsApp.")
                     st.rerun()
+                else:
+                    st.warning("La solicitud ya no está disponible.")
 
     st.divider()
     st.subheader("📌 Mis servicios aceptados")
@@ -1967,6 +1986,7 @@ def pagina_panel_colaborador():
                         s,
                         colaborador
                     )
+
                     st.success("Solicitud finalizada.")
                     st.rerun()
                     # =========================================================
