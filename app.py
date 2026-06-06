@@ -766,6 +766,7 @@ def inicializar_estado():
 
         # Variables para alertas sonoras y visuales
         "alertas_activadas": True,
+        "sonido_habilitado": False,
         "ultimo_total_pendientes_colaborador": 0,
         "ultimo_total_aceptadas_usuario": 0,
         "ultima_alerta_usuario_ids": "",
@@ -1083,12 +1084,11 @@ def finalizar_solicitud(solicitud, colaborador):
 
 def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actualización nueva en la app."):
     """
-    Reproduce una alerta sonora dentro de la app y muestra
-    una tarjeta visual de notificación.
+    Muestra alerta visual y reproduce sonido dentro del navegador.
 
-    Importante:
-    Algunos navegadores pueden bloquear el sonido automático
-    si el usuario no ha interactuado antes con la página.
+    Nota:
+    Para que el navegador permita sonido, primero se debe presionar
+    el botón 'Activar alertas sonoras' en el dispositivo.
     """
     if not st.session_state.get("alertas_activadas", True):
         return
@@ -1099,12 +1099,51 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
         <p>{mensaje}</p>
     </div>
 
-    <audio autoplay>
-        <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
-    </audio>
+    <script>
+    try {{
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.45);
+    }} catch (e) {{
+        console.log("No se pudo reproducir sonido:", e);
+    }}
+    </script>
     """, unsafe_allow_html=True)
 
     st.toast(mensaje)
+
+
+def boton_activar_sonido():
+    """
+    Botón obligatorio para habilitar sonido en el navegador.
+
+    Chrome, Edge y otros navegadores suelen bloquear sonidos automáticos
+    hasta que la persona interactúa con la página.
+    """
+    if not st.session_state.get("sonido_habilitado", False):
+        st.info("🔊 Para escuchar notificaciones, active el sonido en este dispositivo.")
+
+        if st.button("🔊 Activar alertas sonoras", use_container_width=True):
+            st.session_state.sonido_habilitado = True
+
+            reproducir_alerta(
+                "🔊 Alertas activadas",
+                "Las notificaciones sonoras quedaron activadas en este dispositivo."
+            )
+
+            st.rerun()
+    else:
+        st.success("🔊 Alertas sonoras activadas en este dispositivo.")
 
 
 def activar_refresco_automatico():
@@ -1576,6 +1615,7 @@ def pagina_panel_usuario():
     """
     activar_refresco_automatico()
     sidebar_menu()
+    boton_activar_sonido()
 
     usuario = st.session_state.usuario_actual
 
@@ -1777,6 +1817,7 @@ def pagina_panel_colaborador():
     """
     activar_refresco_automatico()
     sidebar_menu()
+    boton_activar_sonido()
 
     colaborador = st.session_state.colaborador_actual
     servicio = colaborador["Servicio"]
