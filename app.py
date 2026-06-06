@@ -1437,34 +1437,32 @@ def pagina_login():
     """
     Pantalla principal de ingreso.
     Mantiene las pestañas de Usuarios y Colaboradores.
-    Corrige los espacios grandes en blanco y el botón administrador.
+    Botón administrador corregido para que el texto no se corte.
     """
     hero()
 
     st.markdown("""
     <style>
-    .admin-button-wrapper button {
-        width: auto !important;
-        min-width: 120px !important;
-        max-width: 150px !important;
-        min-height: 32px !important;
-        padding: 4px 12px !important;
-        border-radius: 999px !important;
-        background: transparent !important;
-        color: #64748b !important;
-        box-shadow: none !important;
-        border: none !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        white-space: nowrap !important;
-        line-height: 1 !important;
+    .admin-admin-box {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        margin-top: 12px;
+        margin-bottom: 4px;
     }
 
-    .admin-button-wrapper button:hover {
-        color: #fb4b18 !important;
-        background: rgba(251, 75, 24, 0.08) !important;
-        transform: none !important;
-        box-shadow: none !important;
+    .admin-admin-box + div button,
+    div[data-testid="column"]:last-child button {
+        white-space: nowrap !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        min-width: 180px !important;
+        height: 42px !important;
+        padding: 8px 18px !important;
+        border-radius: 999px !important;
+        font-size: 14px !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1500,12 +1498,12 @@ def pagina_login():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_a, col_b = st.columns([9, 1])
+    col_espacio, col_admin = st.columns([7, 2])
 
-    with col_b:
-        st.markdown('<div class="admin-button-wrapper">', unsafe_allow_html=True)
+    with col_admin:
+        st.markdown('<div class="admin-admin-box">', unsafe_allow_html=True)
 
-        if st.button("administrador", key="btn_admin_oculto"):
+        if st.button("Administrador", key="btn_admin_oculto", use_container_width=True):
             st.session_state.pagina = "admin_login"
             st.rerun()
 
@@ -1513,10 +1511,6 @@ def pagina_login():
 
 
 def pagina_panel_usuario():
-    """
-    Panel principal para usuarios.
-    Permite seleccionar servicios y ver solicitudes propias.
-    """
     sidebar_menu()
 
     usuario = st.session_state.usuario_actual
@@ -1586,10 +1580,6 @@ def pagina_panel_usuario():
 
 
 def pagina_servicio_usuario():
-    """
-    Muestra información del servicio seleccionado,
-    colaboradores disponibles y formulario de solicitud.
-    """
     sidebar_menu()
 
     usuario = st.session_state.usuario_actual
@@ -1608,23 +1598,11 @@ def pagina_servicio_usuario():
     </div>
     """, unsafe_allow_html=True)
 
-    colaboradores = leer_registros(
-        HOJA_COLABORADORES,
-        ENCABEZADOS_COLABORADORES
-    )
-
-    colaboradores_servicio = [
-        c for c in colaboradores
-        if c["Servicio"] == servicio
-    ]
-
-    disponibles = [
-        c for c in colaboradores_servicio
-        if c["Estado"] == "Disponible"
-    ]
+    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
+    colaboradores_servicio = [c for c in colaboradores if c["Servicio"] == servicio]
+    disponibles = [c for c in colaboradores_servicio if c["Estado"] == "Disponible"]
 
     c1, c2, c3 = st.columns(3)
-
     c1.metric("Colaboradores registrados", len(colaboradores_servicio))
     c2.metric("Disponibles", len(disponibles))
     c3.metric("Ocupados / fuera", len(colaboradores_servicio) - len(disponibles))
@@ -1635,11 +1613,7 @@ def pagina_servicio_usuario():
         st.warning("Aún no hay colaboradores registrados para este servicio.")
     else:
         for c in colaboradores_servicio:
-            nombre = (
-                f'{c["Nombre"]} '
-                f'{c["Primer apellido"]} '
-                f'{c["Segundo apellido"]}'
-            ).strip()
+            nombre = f'{c["Nombre"]} {c["Primer apellido"]} {c["Segundo apellido"]}'.strip()
 
             st.markdown(f"""
             <div class="card">
@@ -1658,9 +1632,7 @@ def pagina_servicio_usuario():
             placeholder="Ejemplo: necesito un taxi hacia el centro / retirar comida en restaurante / trasladar una caja..."
         )
 
-        enviar = st.form_submit_button(
-            f"Hacer llamado de {servicio}"
-        )
+        enviar = st.form_submit_button(f"Hacer llamado de {servicio}")
 
     if enviar:
         if not disponibles:
@@ -1671,11 +1643,7 @@ def pagina_servicio_usuario():
             st.error("Debe indicar el detalle de la solicitud.")
             return
 
-        nueva = crear_solicitud(
-            servicio,
-            usuario,
-            detalle
-        )
+        nueva = crear_solicitud(servicio, usuario, detalle)
 
         st.success(
             f"Solicitud enviada. Código: {nueva['ID']}. Espere a que un colaborador la acepte."
@@ -1690,10 +1658,6 @@ def pagina_servicio_usuario():
 
 
 def pagina_panel_colaborador():
-    """
-    Panel principal de colaborador.
-    Permite cambiar estado, aceptar solicitudes y finalizar servicios.
-    """
     sidebar_menu()
 
     colaborador = st.session_state.colaborador_actual
@@ -1707,11 +1671,7 @@ def pagina_panel_colaborador():
     </div>
     """, unsafe_allow_html=True)
 
-    nombre = (
-        f'{colaborador["Nombre"]} '
-        f'{colaborador["Primer apellido"]} '
-        f'{colaborador["Segundo apellido"]}'
-    ).strip()
+    nombre = f'{colaborador["Nombre"]} {colaborador["Primer apellido"]} {colaborador["Segundo apellido"]}'.strip()
 
     st.markdown(f"""
     <div class="card">
@@ -1739,10 +1699,7 @@ def pagina_panel_colaborador():
         st.write("")
 
         if st.button("Actualizar estado", use_container_width=True):
-            actualizar_estado_colaborador(
-                colaborador,
-                nuevo_estado
-            )
+            actualizar_estado_colaborador(colaborador, nuevo_estado)
             st.success("Estado actualizado.")
             st.rerun()
 
@@ -1774,19 +1731,14 @@ def pagina_panel_colaborador():
                     key=f"aceptar_{s['ID']}",
                     use_container_width=True
                 ):
-                    aceptar_solicitud(
-                        s,
-                        colaborador
-                    )
+                    aceptar_solicitud(s, colaborador)
                     st.success("Solicitud aceptada. Ahora el usuario podrá contactarlo por WhatsApp.")
                     st.rerun()
 
     st.divider()
     st.subheader("📌 Mis servicios aceptados")
 
-    aceptadas = solicitudes_colaborador(
-        colaborador["ID"]
-    )
+    aceptadas = solicitudes_colaborador(colaborador["ID"])
 
     if not aceptadas:
         st.info("Aún no tiene solicitudes aceptadas.")
@@ -1810,10 +1762,7 @@ def pagina_panel_colaborador():
 
             st.link_button(
                 "💬 Chatear con usuario por WhatsApp",
-                link_whatsapp(
-                    s["Teléfono cliente"],
-                    mensaje
-                ),
+                link_whatsapp(s["Teléfono cliente"], mensaje),
                 use_container_width=True
             )
 
@@ -1823,10 +1772,7 @@ def pagina_panel_colaborador():
                     key=f"fin_{s['ID']}",
                     use_container_width=True
                 ):
-                    finalizar_solicitud(
-                        s,
-                        colaborador
-                    )
+                    finalizar_solicitud(s, colaborador)
                     st.success("Solicitud finalizada.")
                     st.rerun()
                     # =========================================================
