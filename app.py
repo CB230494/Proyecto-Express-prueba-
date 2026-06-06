@@ -1,5 +1,6 @@
 import streamlit as st
 import gspread
+import pandas as pd
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import uuid
@@ -24,6 +25,9 @@ HOJA_COLABORADORES = "Datos generales"
 HOJA_SOLICITUDES = "Solicitudes"
 
 ADMIN_WHATSAPP = "50663009645"
+
+ADMIN_USUARIO = "administrador123"
+ADMIN_CLAVE = "123456"
 
 LIMITE_USUARIOS_DEMO = 6
 LIMITE_COLABORADORES_POR_SERVICIO = 5
@@ -260,6 +264,20 @@ input, textarea, select {
 .aceptado { background: #dbeafe; color: #1d4ed8 !important; }
 .finalizado { background: #dcfce7; color: #166534 !important; }
 
+.admin-link-box {
+    text-align: right;
+    margin-top: 35px;
+}
+
+.admin-link-box button {
+    font-size: 11px !important;
+    min-height: 28px !important;
+    opacity: 0.35;
+    background: transparent !important;
+    color: #374151 !important;
+    box-shadow: none !important;
+}
+
 .small-note {
     color: #6b7280 !important;
     font-size: 14px;
@@ -271,7 +289,6 @@ input, textarea, select {
 }
 </style>
 """, unsafe_allow_html=True)
-
 # =========================================================
 # CONEXIÓN GOOGLE SHEETS
 # =========================================================
@@ -302,6 +319,7 @@ def obtener_hoja(nombre, encabezados):
         hoja = libro.add_worksheet(title=nombre, rows=200, cols=len(encabezados) + 3)
 
     valores = hoja.get_all_values()
+
     if not valores:
         hoja.append_row(encabezados)
     else:
@@ -321,6 +339,7 @@ def leer_registros(nombre, encabezados):
         return []
 
     registros = []
+
     for i, fila in enumerate(filas[1:], start=2):
         fila_completa = fila + [""] * (len(encabezados) - len(fila))
         registro = dict(zip(encabezados, fila_completa[:len(encabezados)]))
@@ -344,9 +363,16 @@ def actualizar_celda(nombre, encabezados, fila, columna, valor):
 
 def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
     hoja = obtener_hoja(nombre, encabezados)
+
     for columna, valor in cambios.items():
         indice_columna = encabezados.index(columna) + 1
         hoja.update_cell(fila, indice_columna, valor)
+
+
+def eliminar_fila(nombre, encabezados, fila):
+    hoja = obtener_hoja(nombre, encabezados)
+    hoja.delete_rows(int(fila))
+
 
 # =========================================================
 # FUNCIONES AUXILIARES
@@ -366,8 +392,10 @@ def limpiar_telefono(texto):
 
 def telefono_whatsapp_cr(texto):
     numero = limpiar_telefono(texto)
+
     if numero.startswith("506"):
         return numero
+
     return "506" + numero
 
 
@@ -377,6 +405,7 @@ def link_whatsapp(numero, mensaje):
 
 def usuario_existe(nombre_usuario):
     usuario_n = normalizar_usuario(nombre_usuario)
+
     usuarios = leer_registros(HOJA_USUARIOS, ENCABEZADOS_USUARIOS)
     colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
 
@@ -393,18 +422,25 @@ def usuario_existe(nombre_usuario):
 
 def badge_estado(estado):
     estado_l = str(estado).strip().lower()
+
     if estado_l == "disponible":
         return '<span class="badge disponible">🟢 Disponible</span>'
+
     if estado_l == "ocupado":
         return '<span class="badge ocupado">🔴 Ocupado</span>'
+
     if estado_l == "fuera de servicio":
         return '<span class="badge fuera">⚫ Fuera de servicio</span>'
+
     if estado_l == "pendiente":
         return '<span class="badge pendiente">⏳ Pendiente</span>'
+
     if estado_l == "aceptado":
         return '<span class="badge aceptado">✅ Aceptado</span>'
+
     if estado_l == "finalizado":
         return '<span class="badge finalizado">🏁 Finalizado</span>'
+
     return f'<span class="badge fuera">{estado}</span>'
 
 
@@ -415,6 +451,7 @@ def inicializar_estado():
         "usuario_actual": None,
         "colaborador_actual": None,
         "servicio_seleccionado": None,
+        "admin_autenticado": False
     }
 
     for clave, valor in valores.items():
@@ -428,6 +465,7 @@ def cerrar_sesion():
     st.session_state.usuario_actual = None
     st.session_state.colaborador_actual = None
     st.session_state.servicio_seleccionado = None
+    st.session_state.admin_autenticado = False
 
 
 def total_usuarios_registrados():
@@ -446,8 +484,6 @@ def buscar_usuario_login(nombre_usuario, clave):
     usuarios = leer_registros(HOJA_USUARIOS, ENCABEZADOS_USUARIOS)
 
     for u in usuarios:
-        # El usuario NO distingue mayúsculas/minúsculas.
-        # La clave SÍ acepta números, mayúsculas y minúsculas, y se compara exactamente.
         if normalizar_usuario(u["Usuario"]) == usuario_n and limpiar_texto(u["Clave"]) == clave_limpia:
             return u
 
@@ -479,6 +515,7 @@ def registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave):
         "Tipo": "Usuario",
         "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M")
     }
+
     agregar_registro(HOJA_USUARIOS, ENCABEZADOS_USUARIOS, datos)
     return datos
 
@@ -497,9 +534,12 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
         "Estado": "Disponible",
         "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M")
     }
+
     agregar_registro(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES, datos)
     return datos
-
+    # =========================================================
+# FUNCIONES DE SOLICITUDES
+# =========================================================
 
 def crear_solicitud(servicio, usuario, detalle):
     datos = {
@@ -515,6 +555,7 @@ def crear_solicitud(servicio, usuario, detalle):
         "Colaborador": "",
         "Teléfono colaborador": ""
     }
+
     agregar_registro(HOJA_SOLICITUDES, ENCABEZADOS_SOLICITUDES, datos)
     return datos
 
@@ -542,6 +583,7 @@ def actualizar_estado_colaborador(colaborador, nuevo_estado):
         "Estado",
         nuevo_estado
     )
+
     colaborador["Estado"] = nuevo_estado
     st.session_state.colaborador_actual = colaborador
 
@@ -560,6 +602,7 @@ def aceptar_solicitud(solicitud, colaborador):
             "Teléfono colaborador": colaborador["Teléfono"]
         }
     )
+
     actualizar_estado_colaborador(colaborador, "Ocupado")
 
 
@@ -571,11 +614,12 @@ def finalizar_solicitud(solicitud, colaborador):
         "Estado",
         "Finalizado"
     )
+
     actualizar_estado_colaborador(colaborador, "Disponible")
 
 
 # =========================================================
-# COMPONENTES
+# COMPONENTES VISUALES
 # =========================================================
 
 def hero():
@@ -617,8 +661,11 @@ def sidebar_menu():
                 st.session_state.pagina = "panel_usuario"
             elif st.session_state.tipo == "Colaborador":
                 st.session_state.pagina = "panel_colaborador"
+            elif st.session_state.tipo == "Administrador":
+                st.session_state.pagina = "panel_admin"
             else:
                 st.session_state.pagina = "login"
+
             st.rerun()
 
         if st.session_state.tipo == "Usuario":
@@ -638,9 +685,14 @@ def sidebar_menu():
 
         st.divider()
         st.caption("Claves demo para colaboradores")
+
         for servicio, claves in CLAVES_COLABORADOR.items():
             st.write(f"**{servicio}:** {', '.join(claves)}")
 
+
+# =========================================================
+# FORMULARIOS DE USUARIO Y COLABORADOR
+# =========================================================
 
 def formulario_registro_usuario():
     st.subheader("📝 Registro de usuario nuevo")
@@ -648,16 +700,23 @@ def formulario_registro_usuario():
 
     with st.form("form_registro_usuario"):
         c1, c2, c3 = st.columns(3)
+
         with c1:
             nombre = st.text_input("Nombre")
+
         with c2:
             apellido1 = st.text_input("Primer apellido")
+
         with c3:
             apellido2 = st.text_input("Segundo apellido")
 
         telefono = st.text_input("Número de teléfono Costa Rica")
         usuario = st.text_input("Nombre de usuario")
-        clave = st.text_input("Clave", type="password", help="Puede usar números, mayúsculas y minúsculas.")
+        clave = st.text_input(
+            "Clave",
+            type="password",
+            help="Puede usar números, mayúsculas y minúsculas."
+        )
 
         guardar = st.form_submit_button("Crear usuario")
 
@@ -675,6 +734,7 @@ def formulario_registro_usuario():
             return
 
         nuevo = registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave)
+
         st.success("Usuario creado correctamente. Ya puede ingresar.")
         st.session_state.usuario_actual = nuevo
         st.session_state.tipo = "Usuario"
@@ -693,6 +753,7 @@ def formulario_login_usuario():
 
     if ingresar:
         encontrado = buscar_usuario_login(usuario, clave)
+
         if encontrado:
             st.session_state.usuario_actual = encontrado
             st.session_state.tipo = "Usuario"
@@ -708,10 +769,13 @@ def formulario_registro_colaborador():
 
     with st.form("form_registro_colaborador"):
         c1, c2, c3 = st.columns(3)
+
         with c1:
             nombre = st.text_input("Nombre", key="col_nombre")
+
         with c2:
             apellido1 = st.text_input("Primer apellido", key="col_ap1")
+
         with c3:
             apellido2 = st.text_input("Segundo apellido", key="col_ap2")
 
@@ -719,7 +783,12 @@ def formulario_registro_colaborador():
         servicio = st.selectbox("Servicio que brindará", list(SERVICIOS.keys()))
         codigo = st.text_input("Clave autorizada por el coordinador", type="password")
         usuario = st.text_input("Nombre de usuario", key="col_user")
-        clave = st.text_input("Clave personal", type="password", help="Puede usar números, mayúsculas y minúsculas.", key="col_pass")
+        clave = st.text_input(
+            "Clave personal",
+            type="password",
+            help="Puede usar números, mayúsculas y minúsculas.",
+            key="col_pass"
+        )
 
         guardar = st.form_submit_button("Crear colaborador")
 
@@ -741,6 +810,7 @@ def formulario_registro_colaborador():
             return
 
         nuevo = registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave, servicio)
+
         st.success("Colaborador creado correctamente.")
         st.session_state.colaborador_actual = nuevo
         st.session_state.tipo = "Colaborador"
@@ -759,6 +829,7 @@ def formulario_login_colaborador():
 
     if ingresar:
         encontrado = buscar_colaborador_login(usuario, clave)
+
         if encontrado:
             st.session_state.colaborador_actual = encontrado
             st.session_state.tipo = "Colaborador"
@@ -766,10 +837,8 @@ def formulario_login_colaborador():
             st.rerun()
         else:
             st.error("Usuario o clave incorrecta.")
-
-
-# =========================================================
-# PÁGINAS
+            # =========================================================
+# PÁGINA LOGIN PRINCIPAL
 # =========================================================
 
 def pagina_login():
@@ -786,10 +855,12 @@ def pagina_login():
 
     with tab1:
         col1, col2 = st.columns(2)
+
         with col1:
             st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_login_usuario()
             st.markdown('</div>', unsafe_allow_html=True)
+
         with col2:
             st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_registro_usuario()
@@ -797,18 +868,38 @@ def pagina_login():
 
     with tab2:
         col1, col2 = st.columns(2)
+
         with col1:
             st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_login_colaborador()
             st.markdown('</div>', unsafe_allow_html=True)
+
         with col2:
             st.markdown('<div class="login-card">', unsafe_allow_html=True)
             formulario_registro_colaborador()
             st.markdown('</div>', unsafe_allow_html=True)
 
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns([7, 2, 1])
+
+    with c3:
+        st.markdown('<div class="admin-link-box">', unsafe_allow_html=True)
+
+        if st.button("administrador", key="btn_admin_oculto"):
+            st.session_state.pagina = "admin_login"
+            st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================================================
+# PÁGINA PANEL USUARIO
+# =========================================================
 
 def pagina_panel_usuario():
     sidebar_menu()
+
     usuario = st.session_state.usuario_actual
 
     promo_carousel()
@@ -821,6 +912,7 @@ def pagina_panel_usuario():
     """, unsafe_allow_html=True)
 
     cols = st.columns(4)
+
     for i, (servicio, info) in enumerate(SERVICIOS.items()):
         with cols[i]:
             st.markdown(f"""
@@ -839,6 +931,7 @@ def pagina_panel_usuario():
     st.subheader("📋 Mis solicitudes")
 
     solicitudes = solicitudes_usuario(usuario["ID"])
+
     if not solicitudes:
         st.info("Todavía no tiene solicitudes registradas.")
     else:
@@ -859,6 +952,7 @@ def pagina_panel_usuario():
                     f"Tengo la solicitud #{s['ID']} de {s['Servicio']}. "
                     "Quisiera coordinar los detalles por este medio."
                 )
+
                 st.link_button(
                     "💬 Chatear con colaborador por WhatsApp",
                     link_whatsapp(s["Teléfono colaborador"], mensaje),
@@ -866,8 +960,13 @@ def pagina_panel_usuario():
                 )
 
 
+# =========================================================
+# PÁGINA SERVICIO USUARIO
+# =========================================================
+
 def pagina_servicio_usuario():
     sidebar_menu()
+
     usuario = st.session_state.usuario_actual
     servicio = st.session_state.servicio_seleccionado
 
@@ -886,10 +985,10 @@ def pagina_servicio_usuario():
 
     colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
     colaboradores_servicio = [c for c in colaboradores if c["Servicio"] == servicio]
-
     disponibles = [c for c in colaboradores_servicio if c["Estado"] == "Disponible"]
 
     c1, c2, c3 = st.columns(3)
+
     c1.metric("Colaboradores registrados", len(colaboradores_servicio))
     c2.metric("Disponibles", len(disponibles))
     c3.metric("Ocupados / fuera", len(colaboradores_servicio) - len(disponibles))
@@ -901,6 +1000,7 @@ def pagina_servicio_usuario():
     else:
         for c in colaboradores_servicio:
             nombre = f'{c["Nombre"]} {c["Primer apellido"]} {c["Segundo apellido"]}'.strip()
+
             st.markdown(f"""
             <div class="card">
                 <h3>{nombre}</h3>
@@ -917,6 +1017,7 @@ def pagina_servicio_usuario():
             "Detalle de la solicitud",
             placeholder="Ejemplo: necesito un taxi hacia el centro / retirar comida en restaurante / trasladar una caja..."
         )
+
         enviar = st.form_submit_button(f"Hacer llamado de {servicio}")
 
     if enviar:
@@ -929,7 +1030,9 @@ def pagina_servicio_usuario():
             return
 
         nueva = crear_solicitud(servicio, usuario, detalle)
+
         st.success(f"Solicitud enviada. Código: {nueva['ID']}. Espere a que un colaborador la acepte.")
+
         st.session_state.pagina = "panel_usuario"
         st.rerun()
 
@@ -938,8 +1041,13 @@ def pagina_servicio_usuario():
         st.rerun()
 
 
+# =========================================================
+# PÁGINA PANEL COLABORADOR
+# =========================================================
+
 def pagina_panel_colaborador():
     sidebar_menu()
+
     colaborador = st.session_state.colaborador_actual
     servicio = colaborador["Servicio"]
     info = SERVICIOS[servicio]
@@ -965,6 +1073,7 @@ def pagina_panel_colaborador():
     st.subheader("🚦 Cambiar estado")
 
     c1, c2 = st.columns([2, 1])
+
     with c1:
         nuevo_estado = st.selectbox(
             "Estado",
@@ -972,9 +1081,11 @@ def pagina_panel_colaborador():
             index=["Disponible", "Ocupado", "Fuera de servicio"].index(colaborador["Estado"])
             if colaborador["Estado"] in ["Disponible", "Ocupado", "Fuera de servicio"] else 0
         )
+
     with c2:
         st.write("")
         st.write("")
+
         if st.button("Actualizar estado", use_container_width=True):
             actualizar_estado_colaborador(colaborador, nuevo_estado)
             st.success("Estado actualizado.")
@@ -1012,6 +1123,7 @@ def pagina_panel_colaborador():
     st.subheader("📌 Mis servicios aceptados")
 
     aceptadas = solicitudes_colaborador(colaborador["ID"])
+
     if not aceptadas:
         st.info("Aún no tiene solicitudes aceptadas.")
     else:
@@ -1043,10 +1155,13 @@ def pagina_panel_colaborador():
                     finalizar_solicitud(s, colaborador)
                     st.success("Solicitud finalizada.")
                     st.rerun()
-
+                    # =========================================================
+# PÁGINA EDITAR USUARIO
+# =========================================================
 
 def pagina_editar_usuario():
     sidebar_menu()
+
     usuario = st.session_state.usuario_actual
 
     st.subheader("👤 Cambiar datos de usuario")
@@ -1057,6 +1172,7 @@ def pagina_editar_usuario():
         apellido1 = st.text_input("Primer apellido", value=usuario["Primer apellido"])
         apellido2 = st.text_input("Segundo apellido", value=usuario["Segundo apellido"])
         telefono = st.text_input("Teléfono", value=usuario["Teléfono"])
+
         guardar = st.form_submit_button("Guardar cambios")
 
     if guardar:
@@ -1075,6 +1191,7 @@ def pagina_editar_usuario():
         )
 
         usuario.update(cambios)
+
         st.session_state.usuario_actual = usuario
         st.success("Datos actualizados.")
         st.session_state.pagina = "panel_usuario"
@@ -1082,7 +1199,297 @@ def pagina_editar_usuario():
 
 
 # =========================================================
-# EJECUCIÓN
+# PÁGINA LOGIN ADMINISTRADOR
+# =========================================================
+
+def pagina_admin_login():
+    hero()
+
+    st.markdown("""
+    <div class="card">
+        <h2>🔐 Acceso administrador</h2>
+        <p>Ingrese las credenciales administrativas para gestionar usuarios, colaboradores y revisar el dashboard.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("form_admin_login"):
+        usuario = st.text_input("Usuario administrador")
+        clave = st.text_input("Contraseña", type="password")
+
+        ingresar = st.form_submit_button("Ingresar")
+
+    if ingresar:
+        if usuario == ADMIN_USUARIO and clave == ADMIN_CLAVE:
+            st.session_state.admin_autenticado = True
+            st.session_state.tipo = "Administrador"
+            st.session_state.pagina = "panel_admin"
+            st.rerun()
+        else:
+            st.error("Usuario o contraseña incorrectos.")
+
+    if st.button("⬅️ Volver", use_container_width=True):
+        st.session_state.pagina = "login"
+        st.rerun()
+
+
+# =========================================================
+# PÁGINA PANEL ADMINISTRADOR
+# =========================================================
+
+def pagina_panel_admin():
+    if not st.session_state.get("admin_autenticado"):
+        st.session_state.pagina = "admin_login"
+        st.rerun()
+
+    sidebar_menu()
+
+    st.title("🛡️ Panel Administrador")
+    st.caption("Área privada para control general de usuarios, colaboradores y actividad del sistema.")
+
+    usuarios = leer_registros(HOJA_USUARIOS, ENCABEZADOS_USUARIOS)
+    colaboradores = leer_registros(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES)
+    solicitudes = leer_registros(HOJA_SOLICITUDES, ENCABEZADOS_SOLICITUDES)
+
+    # =====================================================
+    # DASHBOARD GENERAL
+    # =====================================================
+
+    st.divider()
+    st.subheader("📊 Dashboard general")
+
+    total_solicitudes = len(solicitudes)
+    finalizadas = [s for s in solicitudes if s["Estado"] == "Finalizado"]
+    pendientes = [s for s in solicitudes if s["Estado"] == "Pendiente"]
+    aceptadas = [s for s in solicitudes if s["Estado"] == "Aceptado"]
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Usuarios registrados", len(usuarios))
+    c2.metric("Colaboradores", len(colaboradores))
+    c3.metric("Solicitudes totales", total_solicitudes)
+    c4.metric("Finalizadas", len(finalizadas))
+
+    c5, c6, c7 = st.columns(3)
+
+    c5.metric("Pendientes", len(pendientes))
+    c6.metric("Aceptadas", len(aceptadas))
+    c7.metric("Servicios disponibles", len(SERVICIOS))
+
+    # =====================================================
+    # SERVICIOS MÁS SOLICITADOS
+    # =====================================================
+
+    st.divider()
+    st.subheader("🚕 Servicios más solicitados")
+
+    if solicitudes:
+        df_solicitudes = pd.DataFrame(solicitudes)
+
+        conteo_servicios = (
+            df_solicitudes["Servicio"]
+            .value_counts()
+            .reset_index()
+        )
+
+        conteo_servicios.columns = ["Servicio", "Cantidad"]
+
+        st.dataframe(conteo_servicios, use_container_width=True)
+        st.bar_chart(conteo_servicios.set_index("Servicio"))
+    else:
+        st.info("Aún no hay solicitudes registradas.")
+
+    # =====================================================
+    # ACTIVIDAD POR COLABORADOR
+    # =====================================================
+
+    st.divider()
+    st.subheader("🛠️ Actividad por colaborador / trabajador")
+
+    if solicitudes:
+        actividad_colaboradores = {}
+
+        for s in solicitudes:
+            col_id = s.get("Colaborador ID", "")
+            col_nombre = s.get("Colaborador", "")
+            servicio = s.get("Servicio", "")
+            estado = s.get("Estado", "")
+
+            if col_id and col_nombre:
+                if col_id not in actividad_colaboradores:
+                    actividad_colaboradores[col_id] = {
+                        "Colaborador": col_nombre,
+                        "Servicio principal": servicio,
+                        "Total servicios aceptados": 0,
+                        "Servicios finalizados": 0,
+                        "Servicios activos": 0
+                    }
+
+                actividad_colaboradores[col_id]["Total servicios aceptados"] += 1
+
+                if estado == "Finalizado":
+                    actividad_colaboradores[col_id]["Servicios finalizados"] += 1
+
+                if estado == "Aceptado":
+                    actividad_colaboradores[col_id]["Servicios activos"] += 1
+
+        if actividad_colaboradores:
+            df_colaboradores = pd.DataFrame(list(actividad_colaboradores.values()))
+
+            st.dataframe(df_colaboradores, use_container_width=True)
+            st.bar_chart(df_colaboradores.set_index("Colaborador")["Servicios finalizados"])
+        else:
+            st.info("Todavía no hay colaboradores con servicios aceptados.")
+    else:
+        st.info("No hay información de colaboradores todavía.")
+
+    # =====================================================
+    # CLIENTES MÁS ACTIVOS
+    # =====================================================
+
+    st.divider()
+    st.subheader("👤 Clientes más activos")
+
+    if solicitudes:
+        actividad_clientes = {}
+
+        for s in solicitudes:
+            cliente_id = s.get("Cliente ID", "")
+            cliente = s.get("Cliente", "")
+            servicio = s.get("Servicio", "")
+
+            if cliente_id:
+                if cliente_id not in actividad_clientes:
+                    actividad_clientes[cliente_id] = {
+                        "Cliente": cliente,
+                        "Total solicitudes": 0,
+                        "Servicios solicitados": {}
+                    }
+
+                actividad_clientes[cliente_id]["Total solicitudes"] += 1
+
+                actividad_clientes[cliente_id]["Servicios solicitados"][servicio] = (
+                    actividad_clientes[cliente_id]["Servicios solicitados"].get(servicio, 0) + 1
+                )
+
+        tabla_clientes = []
+
+        for datos in actividad_clientes.values():
+            servicios_txt = ", ".join(
+                [f"{serv}: {cant}" for serv, cant in datos["Servicios solicitados"].items()]
+            )
+
+            tabla_clientes.append({
+                "Cliente": datos["Cliente"],
+                "Total solicitudes": datos["Total solicitudes"],
+                "Servicios solicitados": servicios_txt
+            })
+
+        df_clientes = pd.DataFrame(tabla_clientes).sort_values(
+            by="Total solicitudes",
+            ascending=False
+        )
+
+        st.dataframe(df_clientes, use_container_width=True)
+        st.bar_chart(df_clientes.set_index("Cliente")["Total solicitudes"])
+    else:
+        st.info("Todavía no hay clientes con solicitudes.")
+
+    # =====================================================
+    # LISTADO COMPLETO DE SOLICITUDES
+    # =====================================================
+
+    st.divider()
+    st.subheader("📋 Solicitudes registradas")
+
+    if solicitudes:
+        df_todas = pd.DataFrame(solicitudes)
+
+        columnas_mostrar = [
+            "ID", "Fecha", "Servicio", "Cliente",
+            "Teléfono cliente", "Detalle", "Estado",
+            "Colaborador", "Teléfono colaborador"
+        ]
+
+        columnas_existentes = [c for c in columnas_mostrar if c in df_todas.columns]
+
+        st.dataframe(
+            df_todas[columnas_existentes],
+            use_container_width=True
+        )
+    else:
+        st.info("No hay solicitudes registradas.")
+
+    # =====================================================
+    # ELIMINAR USUARIOS
+    # =====================================================
+
+    st.divider()
+    st.subheader("🗑️ Eliminar usuarios")
+
+    st.warning("Al eliminar un usuario se elimina de la hoja Usuarios. Sus solicitudes anteriores quedan como historial.")
+
+    if usuarios:
+        for u in usuarios:
+            nombre = f'{u["Nombre"]} {u["Primer apellido"]} {u["Segundo apellido"]}'.strip()
+
+            with st.expander(f"👤 {nombre} | Usuario: {u['Usuario']}"):
+                st.write(f"**ID:** {u['ID']}")
+                st.write(f"**Teléfono:** {u['Teléfono']}")
+                st.write(f"**Fecha de registro:** {u['Fecha']}")
+
+                confirmar = st.checkbox(
+                    f"Confirmo eliminar usuario {u['Usuario']}",
+                    key=f"check_user_{u['ID']}"
+                )
+
+                if st.button(f"Eliminar usuario {u['ID']}", key=f"del_user_{u['ID']}"):
+                    if confirmar:
+                        eliminar_fila(HOJA_USUARIOS, ENCABEZADOS_USUARIOS, u["_fila"])
+                        st.success("Usuario eliminado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Debe marcar la confirmación antes de eliminar.")
+    else:
+        st.info("No hay usuarios registrados.")
+
+    # =====================================================
+    # ELIMINAR COLABORADORES
+    # =====================================================
+
+    st.divider()
+    st.subheader("🗑️ Eliminar colaboradores / trabajadores")
+
+    st.warning("Al eliminar un colaborador se elimina de la hoja Datos generales. Sus servicios anteriores quedan como historial.")
+
+    if colaboradores:
+        for c in colaboradores:
+            nombre = f'{c["Nombre"]} {c["Primer apellido"]} {c["Segundo apellido"]}'.strip()
+
+            with st.expander(f"🛠️ {nombre} | {c['Servicio']} | Usuario: {c['Usuario']}"):
+                st.write(f"**ID:** {c['ID']}")
+                st.write(f"**Teléfono:** {c['Teléfono']}")
+                st.write(f"**Servicio:** {c['Servicio']}")
+                st.write(f"**Estado actual:** {c['Estado']}")
+                st.write(f"**Fecha de registro:** {c['Fecha']}")
+
+                confirmar = st.checkbox(
+                    f"Confirmo eliminar colaborador {c['Usuario']}",
+                    key=f"check_col_{c['ID']}"
+                )
+
+                if st.button(f"Eliminar colaborador {c['ID']}", key=f"del_col_{c['ID']}"):
+                    if confirmar:
+                        eliminar_fila(HOJA_COLABORADORES, ENCABEZADOS_COLABORADORES, c["_fila"])
+                        st.success("Colaborador eliminado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("Debe marcar la confirmación antes de eliminar.")
+    else:
+        st.info("No hay colaboradores registrados.")
+
+
+# =========================================================
+# EJECUCIÓN PRINCIPAL DE LA APP
 # =========================================================
 
 inicializar_estado()
@@ -1090,14 +1497,25 @@ inicializar_estado()
 try:
     if st.session_state.pagina == "login":
         pagina_login()
+
     elif st.session_state.pagina == "panel_usuario":
         pagina_panel_usuario()
+
     elif st.session_state.pagina == "servicio_usuario":
         pagina_servicio_usuario()
+
     elif st.session_state.pagina == "panel_colaborador":
         pagina_panel_colaborador()
+
     elif st.session_state.pagina == "editar_usuario":
         pagina_editar_usuario()
+
+    elif st.session_state.pagina == "admin_login":
+        pagina_admin_login()
+
+    elif st.session_state.pagina == "panel_admin":
+        pagina_panel_admin()
+
     else:
         st.session_state.pagina = "login"
         st.rerun()
