@@ -1569,11 +1569,6 @@ def formulario_registro_colaborador():
 # =========================================================
 
 def pagina_login():
-    """
-    Pantalla principal de ingreso.
-    Mantiene las pestañas de Usuarios y Colaboradores.
-    Botón administrador corregido.
-    """
     hero()
 
     st.markdown("""
@@ -1642,11 +1637,6 @@ def pagina_login():
 
 
 def pagina_panel_usuario():
-    """
-    Panel principal para usuarios.
-    Permite seleccionar servicios, ver solicitudes propias
-    y recibir alerta cuando una solicitud pasa a Aceptado.
-    """
     activar_refresco_automatico()
     sidebar_menu()
     boton_activar_sonido()
@@ -1666,24 +1656,41 @@ def pagina_panel_usuario():
 
     solicitudes = solicitudes_usuario(usuario["ID"])
 
-    aceptadas_usuario = [
-        s for s in solicitudes
-        if s["Estado"] == "Aceptado"
-    ]
+    # =====================================================
+    # ALERTA USUARIO
+    # Detecta solamente solicitudes NUEVAS que pasaron a Aceptado.
+    # No alerta cuando se finaliza.
+    # =====================================================
 
-    ids_aceptadas_actuales = ",".join(
-        sorted([s["ID"] for s in aceptadas_usuario])
+    ids_aceptadas_actuales = set(
+        s["ID"] for s in solicitudes
+        if s["Estado"] == "Aceptado"
     )
 
-    if ids_aceptadas_actuales != st.session_state.ultima_alerta_usuario_ids:
-        if st.session_state.ultima_alerta_usuario_ids != "":
-            reproducir_alerta(
-                "🔔 Solicitud aceptada",
-                "Un colaborador aceptó una de sus solicitudes."
-            )
+    ids_aceptadas_anteriores_txt = st.session_state.get(
+        "ultima_alerta_usuario_ids",
+        ""
+    )
 
-    st.session_state.ultima_alerta_usuario_ids = ids_aceptadas_actuales
-    st.session_state.ultimo_total_aceptadas_usuario = len(aceptadas_usuario)
+    ids_aceptadas_anteriores = set(
+        ids_aceptadas_anteriores_txt.split(",")
+    ) if ids_aceptadas_anteriores_txt else set()
+
+    ids_nuevas_aceptadas = ids_aceptadas_actuales - ids_aceptadas_anteriores
+
+    if ids_nuevas_aceptadas and ids_aceptadas_anteriores_txt != "":
+        reproducir_alerta(
+            "🔔 Solicitud aceptada",
+            "Un colaborador aceptó una de sus solicitudes."
+        )
+
+    st.session_state.ultima_alerta_usuario_ids = ",".join(
+        sorted(ids_aceptadas_actuales)
+    )
+
+    st.session_state.ultimo_total_aceptadas_usuario = len(
+        ids_aceptadas_actuales
+    )
 
     cols = st.columns(4)
 
@@ -1737,10 +1744,6 @@ def pagina_panel_usuario():
 
 
 def pagina_servicio_usuario():
-    """
-    Muestra información del servicio seleccionado,
-    colaboradores disponibles y formulario de solicitud.
-    """
     sidebar_menu()
 
     usuario = st.session_state.usuario_actual
@@ -1841,11 +1844,6 @@ def pagina_servicio_usuario():
 
 
 def pagina_panel_colaborador():
-    """
-    Panel principal de colaborador.
-    Permite cambiar estado, aceptar solicitudes, finalizar servicios
-    y recibir alerta cuando hay nuevas solicitudes pendientes.
-    """
     activar_refresco_automatico()
     sidebar_menu()
     boton_activar_sonido()
@@ -1911,19 +1909,40 @@ def pagina_panel_colaborador():
     else:
         pendientes = solicitudes_pendientes_servicio(servicio)
 
-    ids_pendientes_actuales = ",".join(
-        sorted([s["ID"] for s in pendientes])
+    # =====================================================
+    # ALERTA COLABORADOR
+    # Detecta solamente solicitudes NUEVAS pendientes.
+    # No alerta cuando una pendiente desaparece porque alguien aceptó.
+    # =====================================================
+
+    ids_pendientes_actuales = set(
+        s["ID"] for s in pendientes
     )
 
-    if ids_pendientes_actuales != st.session_state.ultima_alerta_colaborador_ids:
-        if st.session_state.ultima_alerta_colaborador_ids != "":
-            reproducir_alerta(
-                "🔔 Nueva solicitud",
-                f"Hay una nueva solicitud pendiente para {servicio}."
-            )
+    ids_pendientes_anteriores_txt = st.session_state.get(
+        "ultima_alerta_colaborador_ids",
+        ""
+    )
 
-    st.session_state.ultima_alerta_colaborador_ids = ids_pendientes_actuales
-    st.session_state.ultimo_total_pendientes_colaborador = len(pendientes)
+    ids_pendientes_anteriores = set(
+        ids_pendientes_anteriores_txt.split(",")
+    ) if ids_pendientes_anteriores_txt else set()
+
+    ids_nuevas_pendientes = ids_pendientes_actuales - ids_pendientes_anteriores
+
+    if ids_nuevas_pendientes and ids_pendientes_anteriores_txt != "":
+        reproducir_alerta(
+            "🔔 Nueva solicitud",
+            f"Hay una nueva solicitud pendiente para {servicio}."
+        )
+
+    st.session_state.ultima_alerta_colaborador_ids = ",".join(
+        sorted(ids_pendientes_actuales)
+    )
+
+    st.session_state.ultimo_total_pendientes_colaborador = len(
+        ids_pendientes_actuales
+    )
 
     if not pendientes:
         st.info("No hay solicitudes pendientes para este servicio.")
