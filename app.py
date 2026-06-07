@@ -732,7 +732,11 @@ def inicializar_estado():
         "ultimo_total_pendientes_colaborador": 0,
         "ultimo_total_aceptadas_usuario": 0,
         "ultima_alerta_usuario_ids": "",
-        "ultima_alerta_colaborador_ids": ""
+        "ultima_alerta_colaborador_ids": "",
+
+        # Evitan que la alerta se atrase o salga en el momento incorrecto
+        "alerta_usuario_inicializada": False,
+        "alerta_colaborador_inicializada": False
     }
 
     for clave, valor in valores.items():
@@ -756,6 +760,8 @@ def cerrar_sesion():
     st.session_state.ultimo_total_aceptadas_usuario = 0
     st.session_state.ultima_alerta_usuario_ids = ""
     st.session_state.ultima_alerta_colaborador_ids = ""
+    st.session_state.alerta_usuario_inicializada = False
+    st.session_state.alerta_colaborador_inicializada = False
 
 
 # =========================================================
@@ -1657,9 +1663,9 @@ def pagina_panel_usuario():
     solicitudes = solicitudes_usuario(usuario["ID"])
 
     # =====================================================
-    # ALERTA USUARIO
-    # Detecta solamente solicitudes NUEVAS que pasaron a Aceptado.
-    # No alerta cuando se finaliza.
+    # ALERTA PARA USUARIO
+    # Suena SOLO cuando aparece una solicitud NUEVA en estado Aceptado.
+    # No suena cuando finalizan.
     # =====================================================
 
     ids_aceptadas_actuales = set(
@@ -1678,11 +1684,14 @@ def pagina_panel_usuario():
 
     ids_nuevas_aceptadas = ids_aceptadas_actuales - ids_aceptadas_anteriores
 
-    if ids_nuevas_aceptadas and ids_aceptadas_anteriores_txt != "":
-        reproducir_alerta(
-            "🔔 Solicitud aceptada",
-            "Un colaborador aceptó una de sus solicitudes."
-        )
+    if not st.session_state.get("alerta_usuario_inicializada", False):
+        st.session_state.alerta_usuario_inicializada = True
+    else:
+        if ids_nuevas_aceptadas:
+            reproducir_alerta(
+                "🔔 Solicitud aceptada",
+                "Un colaborador aceptó una de sus solicitudes."
+            )
 
     st.session_state.ultima_alerta_usuario_ids = ",".join(
         sorted(ids_aceptadas_actuales)
@@ -1910,9 +1919,9 @@ def pagina_panel_colaborador():
         pendientes = solicitudes_pendientes_servicio(servicio)
 
     # =====================================================
-    # ALERTA COLABORADOR
-    # Detecta solamente solicitudes NUEVAS pendientes.
-    # No alerta cuando una pendiente desaparece porque alguien aceptó.
+    # ALERTA PARA COLABORADOR
+    # Suena SOLO cuando aparece una solicitud NUEVA pendiente.
+    # No suena cuando desaparece porque otro colaborador aceptó.
     # =====================================================
 
     ids_pendientes_actuales = set(
@@ -1930,11 +1939,14 @@ def pagina_panel_colaborador():
 
     ids_nuevas_pendientes = ids_pendientes_actuales - ids_pendientes_anteriores
 
-    if ids_nuevas_pendientes and ids_pendientes_anteriores_txt != "":
-        reproducir_alerta(
-            "🔔 Nueva solicitud",
-            f"Hay una nueva solicitud pendiente para {servicio}."
-        )
+    if not st.session_state.get("alerta_colaborador_inicializada", False):
+        st.session_state.alerta_colaborador_inicializada = True
+    else:
+        if ids_nuevas_pendientes:
+            reproducir_alerta(
+                "🔔 Nueva solicitud",
+                f"Hay una nueva solicitud pendiente para {servicio}."
+            )
 
     st.session_state.ultima_alerta_colaborador_ids = ",".join(
         sorted(ids_pendientes_actuales)
