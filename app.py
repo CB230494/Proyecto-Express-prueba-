@@ -4,6 +4,7 @@
 # =========================================================
 
 import streamlit as st
+import streamlit.components.v1 as components
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
@@ -12,7 +13,6 @@ import uuid
 import re
 from urllib.parse import quote
 from streamlit_autorefresh import st_autorefresh
-import streamlit.components.v1 as components
 
 # =========================================================
 # CONFIGURACIÓN GENERAL DE STREAMLIT
@@ -896,6 +896,10 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
 # SOLICITUDES, COMPONENTES VISUALES, ALERTAS Y FORMULARIOS
 # =========================================================
 
+# =========================================================
+# FUNCIONES DE SOLICITUDES
+# =========================================================
+
 def crear_solicitud(servicio, usuario, detalle):
     """
     Crea una nueva solicitud de servicio hecha por un usuario.
@@ -940,9 +944,8 @@ def solicitudes_usuario(usuario_id):
 
 def solicitudes_pendientes_servicio(servicio):
     """
-    Devuelve solo las solicitudes pendientes de un servicio.
-    Si una solicitud ya fue aceptada por otro colaborador,
-    ya no aparece para los demás.
+    Devuelve solamente las solicitudes pendientes de un servicio.
+    Si otro colaborador ya aceptó la solicitud, desaparece para los demás.
     """
     solicitudes = leer_registros(
         HOJA_SOLICITUDES,
@@ -957,8 +960,7 @@ def solicitudes_pendientes_servicio(servicio):
 
 def solicitudes_colaborador(colaborador_id):
     """
-    Devuelve todas las solicitudes aceptadas o finalizadas
-    por un colaborador específico.
+    Devuelve todas las solicitudes tomadas por un colaborador.
     """
     solicitudes = leer_registros(
         HOJA_SOLICITUDES,
@@ -976,7 +978,7 @@ def actualizar_estado_colaborador(colaborador, nuevo_estado):
     Cambia el estado de un colaborador.
 
     Si el colaborador guardado en sesión no trae _fila,
-    lo vuelve a buscar por ID para evitar errores.
+    se busca nuevamente en Google Sheets usando el ID.
     """
     fila_colaborador = colaborador.get("_fila")
 
@@ -1017,9 +1019,10 @@ def aceptar_solicitud(solicitud, colaborador):
     """
     Acepta una solicitud pendiente.
 
-    Blindaje:
-    Antes de aceptar, vuelve a leer la solicitud desde Google Sheets.
-    Si otro colaborador ya la aceptó, bloquea la acción.
+    Protección:
+    Antes de aceptar, vuelve a leer Google Sheets.
+    Si la solicitud ya fue aceptada por otro colaborador,
+    bloquea la acción.
     """
     solicitudes_actuales = leer_registros(
         HOJA_SOLICITUDES,
@@ -1067,8 +1070,7 @@ def aceptar_solicitud(solicitud, colaborador):
 
 def finalizar_solicitud(solicitud, colaborador):
     """
-    Finaliza una solicitud aceptada y devuelve al colaborador
-    al estado Disponible.
+    Finaliza una solicitud y devuelve al colaborador a Disponible.
     """
     actualizar_celda(
         HOJA_SOLICITUDES,
@@ -1085,13 +1087,13 @@ def finalizar_solicitud(solicitud, colaborador):
 
 
 # =========================================================
-# ALERTAS SONORAS / VISUALES
+# ALERTAS SONORAS Y VISUALES
 # =========================================================
 
 def boton_activar_sonido():
     """
-    Muestra un botón real en HTML para desbloquear sonido,
-    notificaciones del navegador y vibración si el dispositivo lo permite.
+    Botón para solicitar permiso del navegador y activar sonido.
+    Debe presionarse una vez en cada dispositivo.
     """
     components.html("""
     <div style="
@@ -1129,42 +1131,40 @@ def boton_activar_sonido():
     </div>
 
     <script>
-    window.expressAudioReady = window.expressAudioReady || false;
-
     function beepExpress() {
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             const audioCtx = new AudioContext();
 
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
+            const osc1 = audioCtx.createOscillator();
+            const gain1 = audioCtx.createGain();
 
-            oscillator.type = "square";
-            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-            gainNode.gain.setValueAtTime(0.35, audioCtx.currentTime);
+            osc1.type = "square";
+            osc1.frequency.setValueAtTime(900, audioCtx.currentTime);
+            gain1.gain.setValueAtTime(0.35, audioCtx.currentTime);
 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            osc1.connect(gain1);
+            gain1.connect(audioCtx.destination);
 
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.45);
+            osc1.start();
+            osc1.stop(audioCtx.currentTime + 0.40);
 
             setTimeout(() => {
                 try {
-                    const oscillator2 = audioCtx.createOscillator();
-                    const gainNode2 = audioCtx.createGain();
+                    const osc2 = audioCtx.createOscillator();
+                    const gain2 = audioCtx.createGain();
 
-                    oscillator2.type = "square";
-                    oscillator2.frequency.setValueAtTime(1040, audioCtx.currentTime);
-                    gainNode2.gain.setValueAtTime(0.35, audioCtx.currentTime);
+                    osc2.type = "square";
+                    osc2.frequency.setValueAtTime(1150, audioCtx.currentTime);
+                    gain2.gain.setValueAtTime(0.35, audioCtx.currentTime);
 
-                    oscillator2.connect(gainNode2);
-                    gainNode2.connect(audioCtx.destination);
+                    osc2.connect(gain2);
+                    gain2.connect(audioCtx.destination);
 
-                    oscillator2.start();
-                    oscillator2.stop(audioCtx.currentTime + 0.45);
+                    osc2.start();
+                    osc2.stop(audioCtx.currentTime + 0.45);
                 } catch (e) {}
-            }, 520);
+            }, 480);
 
         } catch (e) {
             console.log("Error de sonido:", e);
@@ -1173,13 +1173,18 @@ def boton_activar_sonido():
 
     async function activarAlertasExpress() {
         localStorage.setItem("express_alertas_activas", "1");
-        window.expressAudioReady = true;
 
         beepExpress();
 
         if ("Notification" in window) {
             try {
-                await Notification.requestPermission();
+                const permiso = await Notification.requestPermission();
+
+                if (permiso === "granted") {
+                    new Notification("🔊 Alertas activadas", {
+                        body: "Express Local ya puede mostrar notificaciones mientras la app esté abierta."
+                    });
+                }
             } catch (e) {}
         }
 
@@ -1188,15 +1193,15 @@ def boton_activar_sonido():
         }
 
         document.getElementById("estado_alerta_express").innerHTML =
-            "✅ Alertas activadas. Mantenga la app abierta para recibir avisos.";
+            "✅ Alertas activadas. Mantenga esta pantalla abierta.";
     }
     </script>
-    """, height=145)
+    """, height=150)
 
 
 def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actualización nueva en la app."):
     """
-    Dispara alerta visual, sonido, vibración y notificación del navegador.
+    Lanza alerta visual, sonido, vibración y notificación del navegador.
     Funciona mientras la app esté abierta.
     """
     if not st.session_state.get("alertas_activadas", True):
@@ -1216,35 +1221,52 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             const audioCtx = new AudioContext();
 
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
+            const osc1 = audioCtx.createOscillator();
+            const gain1 = audioCtx.createGain();
 
-            oscillator.type = "square";
-            oscillator.frequency.setValueAtTime(950, audioCtx.currentTime);
-            gainNode.gain.setValueAtTime(0.40, audioCtx.currentTime);
+            osc1.type = "square";
+            osc1.frequency.setValueAtTime(950, audioCtx.currentTime);
+            gain1.gain.setValueAtTime(0.45, audioCtx.currentTime);
 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            osc1.connect(gain1);
+            gain1.connect(audioCtx.destination);
 
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.55);
+            osc1.start();
+            osc1.stop(audioCtx.currentTime + 0.55);
 
             setTimeout(() => {{
                 try {{
-                    const oscillator2 = audioCtx.createOscillator();
-                    const gainNode2 = audioCtx.createGain();
+                    const osc2 = audioCtx.createOscillator();
+                    const gain2 = audioCtx.createGain();
 
-                    oscillator2.type = "square";
-                    oscillator2.frequency.setValueAtTime(1150, audioCtx.currentTime);
-                    gainNode2.gain.setValueAtTime(0.40, audioCtx.currentTime);
+                    osc2.type = "square";
+                    osc2.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                    gain2.gain.setValueAtTime(0.45, audioCtx.currentTime);
 
-                    oscillator2.connect(gainNode2);
-                    gainNode2.connect(audioCtx.destination);
+                    osc2.connect(gain2);
+                    gain2.connect(audioCtx.destination);
 
-                    oscillator2.start();
-                    oscillator2.stop(audioCtx.currentTime + 0.55);
+                    osc2.start();
+                    osc2.stop(audioCtx.currentTime + 0.55);
                 }} catch(e) {{}}
             }}, 650);
+
+            setTimeout(() => {{
+                try {{
+                    const osc3 = audioCtx.createOscillator();
+                    const gain3 = audioCtx.createGain();
+
+                    osc3.type = "square";
+                    osc3.frequency.setValueAtTime(800, audioCtx.currentTime);
+                    gain3.gain.setValueAtTime(0.45, audioCtx.currentTime);
+
+                    osc3.connect(gain3);
+                    gain3.connect(audioCtx.destination);
+
+                    osc3.start();
+                    osc3.stop(audioCtx.currentTime + 0.55);
+                }} catch(e) {{}}
+            }}, 1300);
 
         }} catch(e) {{
             console.log("No se pudo reproducir sonido:", e);
@@ -1254,13 +1276,12 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
     beepExpressNow();
 
     if (navigator.vibrate) {{
-        navigator.vibrate([400, 160, 400, 160, 400]);
+        navigator.vibrate([400, 180, 400, 180, 400]);
     }}
 
     if ("Notification" in window && Notification.permission === "granted") {{
         new Notification("{titulo}", {{
-            body: "{mensaje}",
-            icon: "https://cdn-icons-png.flaticon.com/512/1046/1046784.png"
+            body: "{mensaje}"
         }});
     }}
     </script>
@@ -1271,8 +1292,8 @@ def reproducir_alerta(titulo="🔔 Nueva notificación", mensaje="Hay una actual
 
 def activar_refresco_automatico():
     """
-    Refresca automáticamente la app para revisar cambios.
-    Se mantiene en 60 segundos para no saturar Google Sheets.
+    Refresca la app para revisar cambios.
+    Se deja en 60 segundos para no saturar Google Sheets.
     """
     st_autorefresh(
         interval=60000,
