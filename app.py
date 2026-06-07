@@ -1675,15 +1675,12 @@ def pagina_panel_usuario():
         sorted([s["ID"] for s in aceptadas_usuario])
     )
 
-    if (
-        ids_aceptadas_actuales
-        and st.session_state.ultima_alerta_usuario_ids
-        and ids_aceptadas_actuales != st.session_state.ultima_alerta_usuario_ids
-    ):
-        reproducir_alerta(
-            "🔔 Solicitud aceptada",
-            "Un colaborador aceptó una de sus solicitudes."
-        )
+    if ids_aceptadas_actuales != st.session_state.ultima_alerta_usuario_ids:
+        if st.session_state.ultima_alerta_usuario_ids != "":
+            reproducir_alerta(
+                "🔔 Solicitud aceptada",
+                "Un colaborador aceptó una de sus solicitudes."
+            )
 
     st.session_state.ultima_alerta_usuario_ids = ids_aceptadas_actuales
     st.session_state.ultimo_total_aceptadas_usuario = len(aceptadas_usuario)
@@ -1918,15 +1915,12 @@ def pagina_panel_colaborador():
         sorted([s["ID"] for s in pendientes])
     )
 
-    if (
-        ids_pendientes_actuales
-        and st.session_state.ultima_alerta_colaborador_ids
-        and ids_pendientes_actuales != st.session_state.ultima_alerta_colaborador_ids
-    ):
-        reproducir_alerta(
-            "🔔 Nueva solicitud",
-            f"Hay una nueva solicitud pendiente para {servicio}."
-        )
+    if ids_pendientes_actuales != st.session_state.ultima_alerta_colaborador_ids:
+        if st.session_state.ultima_alerta_colaborador_ids != "":
+            reproducir_alerta(
+                "🔔 Nueva solicitud",
+                f"Hay una nueva solicitud pendiente para {servicio}."
+            )
 
     st.session_state.ultima_alerta_colaborador_ids = ids_pendientes_actuales
     st.session_state.ultimo_total_pendientes_colaborador = len(pendientes)
