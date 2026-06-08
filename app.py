@@ -44,7 +44,7 @@ HOJA_SOLICITUDES = "Solicitudes"
 # FIREBASE PUSH
 # =========================================================
 
-PWA_NOTIFICACIONES_URL = "https://express-local-push-test.web.app"
+PWA_NOTIFICACIONES_URL = "https://express-local-c1c56.web.app"
 
 # =========================================================
 # DATOS GENERALES DEL SISTEMA
