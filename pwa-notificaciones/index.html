@@ -1,1 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Activando notificaciones...</title>
+  <link rel="manifest" href="/manifest.json" />
+</head>
+<body>
+  <h2>🔔 Activando notificaciones...</h2>
+  <p>Espere un momento. Será redirigido automáticamente a Express Local.</p>
+  <pre id="salida"></pre>
 
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCQfbLIlHZ18BNBqKAxIRY7HHd_QcQbpxg",
+      authDomain: "express-local-push-test.firebaseapp.com",
+      projectId: "express-local-push-test",
+      storageBucket: "express-local-push-test.firebasestorage.app",
+      messagingSenderId: "895952227571",
+      appId: "1:895952227571:web:53b7cbc65e2acc69993b86"
+    };
+
+    const vapidKey = "BDAeUsGr4l__q54Crj0gZpmhIrGex_Yr3bBZljhB1JB7zFvFIR-V0IzwRCZNo3OifsvRNCF0lWyuW9gY-9AK_c8";
+
+    const streamlitUrl = "https://4e8jrjeknafa4bup5eycmc.streamlit.app";
+
+    const params = new URLSearchParams(window.location.search);
+    const pushTipo = params.get("push_tipo") || "";
+    const pushId = params.get("push_id") || "";
+
+    const salida = document.getElementById("salida");
+
+    async function activarPush() {
+      try {
+        if (!pushTipo || !pushId) {
+          salida.textContent = "Faltan datos de usuario. Regrese a Express Local e intente de nuevo.";
+          return;
+        }
+
+        salida.textContent = "Solicitando permiso de notificaciones...";
+
+        const permission = await Notification.requestPermission();
+
+        if (permission !== "granted") {
+          salida.textContent = "Permiso de notificaciones denegado.";
+          setTimeout(() => {
+            window.location.href = streamlitUrl;
+          }, 2500);
+          return;
+        }
+
+        salida.textContent = "Registrando dispositivo...";
+
+        const app = initializeApp(firebaseConfig);
+        const messaging = getMessaging(app);
+
+        const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+        await navigator.serviceWorker.ready;
+
+        const token = await getToken(messaging, {
+          vapidKey: vapidKey,
+          serviceWorkerRegistration: registration
+        });
+
+        salida.textContent = "Notificaciones activadas correctamente. Volviendo a Express Local...";
+
+        const regreso = new URL(streamlitUrl);
+        regreso.searchParams.set("push_token", token);
+        regreso.searchParams.set("push_tipo", pushTipo);
+        regreso.searchParams.set("push_id", pushId);
+
+        setTimeout(() => {
+          window.location.href = regreso.toString();
+        }, 1200);
+
+      } catch (error) {
+        console.error(error);
+        salida.textContent = "Error al activar notificaciones. Regrese a Express Local e intente nuevamente.";
+      }
+    }
+
+    activarPush();
+  </script>
+</body>
+</html>
