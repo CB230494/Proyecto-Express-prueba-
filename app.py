@@ -1,21 +1,29 @@
 # =========================================================
 # PARTE 1 / 5
-# IMPORTACIONES, CONFIGURACIÓN GENERAL Y ESTILO VISUAL
+# CONFIGURACIÓN GENERAL, IMPORTACIONES Y CONSTANTES
+# App Express Local + Google Sheets + Firebase Push
 # =========================================================
 
 import streamlit as st
-import streamlit.components.v1 as components
-import gspread
 import pandas as pd
-from google.oauth2.service_account import Credentials
-from datetime import datetime
-import uuid
+import gspread
 import re
+import uuid
+import json
+import base64
+
+from datetime import datetime
 from urllib.parse import quote
-from streamlit_autorefresh import st_autorefresh
+from google.oauth2.service_account import Credentials
+
+# Firebase Admin para enviar notificaciones push reales
+import firebase_admin
+from firebase_admin import credentials as firebase_credentials
+from firebase_admin import messaging
+
 
 # =========================================================
-# CONFIGURACIÓN GENERAL DE STREAMLIT
+# CONFIGURACIÓN DE PÁGINA
 # =========================================================
 
 st.set_page_config(
@@ -25,439 +33,294 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =========================================================
-# CONFIGURACIÓN DE GOOGLE SHEETS
-# =========================================================
-
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1LSnqaX5qDsw1Tq-qdknohQPr6XX09JnqAM0-4CiqC0E/edit?gid=0#gid=0"
-
-HOJA_USUARIOS = "Usuarios"
-HOJA_COLABORADORES = "Datos generales"
-HOJA_SOLICITUDES = "Solicitudes"
 
 # =========================================================
-# DATOS GENERALES DEL SISTEMA
+# URL DE GOOGLE SHEETS
 # =========================================================
 
-ADMIN_WHATSAPP = "50663009645"
+SPREADSHEET_URL = "AQUI_PEGA_LA_URL_DE_TU_GOOGLE_SHEETS"
+
+
+# =========================================================
+# CREDENCIALES ADMINISTRADOR
+# =========================================================
 
 ADMIN_USUARIO = "administrador123"
 ADMIN_CLAVE = "123456"
 
-LIMITE_USUARIOS_DEMO = 6
-LIMITE_COLABORADORES_POR_SERVICIO = 5
 
 # =========================================================
-# CATÁLOGO DE SERVICIOS
+# HOJAS DE GOOGLE SHEETS
+# =========================================================
+
+HOJA_USUARIOS = "Usuarios"
+HOJA_DATOS_GENERALES = "Datos generales"
+HOJA_COLABORADORES = "Colaboradores"
+HOJA_SOLICITUDES = "Solicitudes"
+
+
+# =========================================================
+# ENCABEZADOS DE HOJAS
+# IMPORTANTE:
+# Push Token se agrega automáticamente si no existe.
+# =========================================================
+
+ENCABEZADOS_USUARIOS = [
+    "ID",
+    "Nombre",
+    "Primer apellido",
+    "Segundo apellido",
+    "Teléfono",
+    "Usuario",
+    "Clave",
+    "Tipo",
+    "Fecha",
+    "Push Token"
+]
+
+ENCABEZADOS_COLABORADORES = [
+    "ID",
+    "Nombre",
+    "Primer apellido",
+    "Segundo apellido",
+    "Teléfono",
+    "Usuario",
+    "Clave",
+    "Tipo",
+    "Servicio",
+    "Estado",
+    "Fecha",
+    "Push Token"
+]
+
+ENCABEZADOS_SOLICITUDES = [
+    "ID",
+    "Fecha",
+    "Servicio",
+    "Cliente ID",
+    "Cliente",
+    "Teléfono cliente",
+    "Detalle",
+    "Estado",
+    "Colaborador ID",
+    "Colaborador",
+    "Teléfono colaborador"
+]
+
+ENCABEZADOS_DATOS_GENERALES = [
+    "Clave",
+    "Valor"
+]
+
+
+# =========================================================
+# SERVICIOS DISPONIBLES
 # =========================================================
 
 SERVICIOS = {
     "Taxi": {
         "icono": "🚕",
-        "color1": "#facc15",
-        "color2": "#f97316",
-        "descripcion": "Viajes locales, traslados rápidos y servicio puerta a puerta.",
-        "mensaje": "Hola, necesito ayuda para solicitar un taxi."
+        "descripcion": "Servicio de transporte local rápido y seguro.",
+        "color1": "#ff9800",
+        "color2": "#ff3d00"
     },
     "Express": {
         "icono": "🛵",
-        "color1": "#ef4444",
-        "color2": "#fb7185",
-        "descripcion": "Mandados, compras, documentos y entregas rápidas.",
-        "mensaje": "Hola, necesito ayuda para solicitar un express."
+        "descripcion": "Mandados, entregas y servicios express.",
+        "color1": "#ff5f6d",
+        "color2": "#ffc371"
     },
     "Carga": {
         "icono": "📦",
-        "color1": "#2563eb",
-        "color2": "#06b6d4",
-        "descripcion": "Traslado de paquetes, compras grandes o artículos medianos.",
-        "mensaje": "Hola, necesito ayuda para solicitar servicio de carga."
+        "descripcion": "Traslado de paquetes, cajas y artículos.",
+        "color1": "#2193b0",
+        "color2": "#6dd5ed"
     },
     "Camión": {
         "icono": "🚚",
-        "color1": "#16a34a",
-        "color2": "#22c55e",
-        "descripcion": "Mudanzas, materiales, carga pesada o transporte especial.",
-        "mensaje": "Hola, necesito ayuda para solicitar un camión."
+        "descripcion": "Servicio para cargas grandes o traslados pesados.",
+        "color1": "#11998e",
+        "color2": "#38ef7d"
     }
 }
 
-# =========================================================
-# CLAVES DEMO PARA COLABORADORES
-# =========================================================
-
-CLAVES_COLABORADOR = {
-    "Taxi": ["TAXI01", "TAXI02", "TAXI03", "TAXI04", "TAXI05", "TAXI06"],
-    "Express": ["EXP01", "EXP02", "EXP03", "EXP04", "EXP05", "EXP06"],
-    "Carga": ["CARGA01", "CARGA02", "CARGA03", "CARGA04", "CARGA05", "CARGA06"],
-    "Camión": ["CAMION01", "CAMION02", "CAMION03", "CAMION04", "CAMION05", "CAMION06"],
-}
 
 # =========================================================
-# ENCABEZADOS DE LAS HOJAS
+# LÍMITES DEMO
 # =========================================================
 
-ENCABEZADOS_USUARIOS = [
-    "ID", "Nombre", "Primer apellido", "Segundo apellido",
-    "Teléfono", "Usuario", "Clave", "Tipo", "Fecha"
-]
+MAX_USUARIOS_DEMO = 6
 
-ENCABEZADOS_COLABORADORES = [
-    "ID", "Nombre", "Primer apellido", "Segundo apellido",
-    "Teléfono", "Usuario", "Clave", "Tipo", "Servicio", "Estado", "Fecha"
-]
+MAX_COLABORADORES_POR_SERVICIO = {
+    "Taxi": 6,
+    "Express": 6,
+    "Carga": 6,
+    "Camión": 6
+}
 
-ENCABEZADOS_SOLICITUDES = [
-    "ID", "Fecha", "Servicio", "Cliente ID", "Cliente",
-    "Teléfono cliente", "Detalle", "Estado", "Colaborador ID",
-    "Colaborador", "Teléfono colaborador"
-]
 
 # =========================================================
-# ESTILO VISUAL MODERNO
+# CONFIGURACIÓN FIREBASE PUSH
+# IMPORTANTE:
+# En Streamlit Cloud debes guardar firebase_service_account
+# dentro de st.secrets, NO en GitHub.
 # =========================================================
 
-st.markdown("""
-<style>
+@st.cache_resource(show_spinner=False)
+def inicializar_firebase_admin():
+    """
+    Inicializa Firebase Admin para enviar notificaciones push.
+    Usa st.secrets["firebase_service_account"].
+    """
 
-:root, html, body, .stApp {
-    background:
-        radial-gradient(circle at top left, rgba(255, 121, 46, 0.18), transparent 34%),
-        radial-gradient(circle at top right, rgba(59, 130, 246, 0.13), transparent 30%),
-        linear-gradient(135deg, #fff7ed 0%, #ffffff 45%, #eff6ff 100%) !important;
-    color: #111827 !important;
-    font-family: 'Segoe UI', sans-serif;
-}
+    if firebase_admin._apps:
+        return firebase_admin.get_app()
 
-[data-testid="stHeader"] {
-    background: transparent !important;
-}
+    if "firebase_service_account" not in st.secrets:
+        return None
 
-[data-testid="stSidebar"] {
-    background:
-        radial-gradient(circle at top left, rgba(249, 115, 22, 0.22), transparent 30%),
-        linear-gradient(180deg, #07111f 0%, #0f172a 55%, #111827 100%) !important;
-    border-right: 1px solid rgba(255,255,255,0.08);
-}
+    service_account_info = dict(st.secrets["firebase_service_account"])
 
-[data-testid="stSidebar"] * {
-    color: #ffffff !important;
-}
+    cred = firebase_credentials.Certificate(service_account_info)
 
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 {
-    color: #ffffff !important;
-    font-weight: 950 !important;
-}
+    app = firebase_admin.initialize_app(cred)
 
-[data-testid="stSidebar"] .stButton > button {
-    background: rgba(255,255,255,0.06) !important;
-    border: 1px solid rgba(255,255,255,0.08) !important;
-    color: #ffffff !important;
-    border-radius: 16px !important;
-    box-shadow: none !important;
-    justify-content: flex-start !important;
-}
+    return app
 
-[data-testid="stSidebar"] .stButton > button:hover {
-    background: linear-gradient(135deg, #fb923c, #ef4444) !important;
-    border: 1px solid transparent !important;
-}
 
-h1, h2, h3, h4, h5, h6, p, label, span, div {
-    color: #111827;
-}
+def firebase_disponible():
+    """
+    Verifica si Firebase Admin está configurado.
+    """
+    try:
+        app = inicializar_firebase_admin()
+        return app is not None
+    except Exception:
+        return False
 
-h1 {
-    font-weight: 950 !important;
-}
 
-p {
-    line-height: 1.45;
-}
+# =========================================================
+# ESTILOS BASE
+# =========================================================
 
-input, textarea, select {
-    border-radius: 14px !important;
-}
-
-.stTextInput input,
-.stTextArea textarea,
-.stSelectbox div[data-baseweb="select"] > div {
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 14px !important;
-    min-height: 48px !important;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-}
-
-.stTextInput input:focus,
-.stTextArea textarea:focus {
-    border: 1px solid #fb923c !important;
-    box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.18) !important;
-}
-
-.stButton > button,
-.stFormSubmitButton > button {
-    border-radius: 15px !important;
-    border: none !important;
-    font-weight: 900 !important;
-    min-height: 48px !important;
-    background: linear-gradient(135deg, #ff7a1a, #ff3d1f) !important;
-    color: #ffffff !important;
-    box-shadow: 0 14px 26px rgba(239, 68, 68, 0.24) !important;
-    transition: all .18s ease-in-out;
-}
-
-.stButton > button:hover,
-.stFormSubmitButton > button:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.03);
-    box-shadow: 0 18px 32px rgba(239, 68, 68, 0.30) !important;
-}
-
-.stLinkButton > a {
-    border-radius: 15px !important;
-    border: none !important;
-    font-weight: 900 !important;
-    min-height: 48px !important;
-    background: linear-gradient(135deg, #22c55e, #16a34a) !important;
-    color: #ffffff !important;
-    text-align: center !important;
-    box-shadow: 0 14px 26px rgba(34, 197, 94, 0.22) !important;
-}
-
-.hero {
-    padding: 34px 30px 28px 30px;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    margin-bottom: 18px;
-    text-align: center;
-    position: relative;
-}
-
-.hero h1 {
-    font-size: 58px;
-    margin: 0;
-    font-weight: 950;
-    letter-spacing: -1.8px;
-    color: #111827 !important;
-}
-
-.hero h1 span {
-    color: #fb4b18 !important;
-}
-
-.hero p {
-    font-size: 20px;
-    margin-top: 10px;
-    color: #64748b !important;
-    font-weight: 500;
-}
-
-.card {
-    background: rgba(255,255,255,0.88);
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    box-shadow: 0 22px 55px rgba(15, 23, 42, 0.09);
-    border-radius: 26px;
-    padding: 24px;
-    margin-bottom: 18px;
-    backdrop-filter: blur(14px);
-}
-
-.login-card {
-    min-height: 210px;
-    border-radius: 24px;
-    padding: 26px;
-    background: rgba(255,255,255,0.76);
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    box-shadow: 0 20px 42px rgba(15, 23, 42, 0.06);
-    backdrop-filter: blur(12px);
-}
-
-.service-card {
-    border-radius: 26px;
-    padding: 28px 22px;
-    min-height: 205px;
-    box-shadow: 0 22px 42px rgba(15, 23, 42, 0.17);
-    transition: all .2s ease;
-    border: 1px solid rgba(255,255,255,0.28);
-}
-
-.service-card:hover {
-    transform: translateY(-4px);
-}
-
-.service-card h2 {
-    color: #ffffff !important;
-    font-size: 32px;
-    margin: 0 0 10px 0;
-    font-weight: 950;
-}
-
-.service-card p {
-    color: #fff7ed !important;
-    font-size: 15px;
-    line-height: 1.35;
-}
-
-.promo-carousel {
-    height: 168px;
-    border-radius: 28px;
-    overflow: hidden;
-    position: relative;
-    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.13);
-    margin-bottom: 24px;
-    background: linear-gradient(135deg, #fb7185, #f97316, #22c55e, #06b6d4);
-    background-size: 400% 400%;
-    animation: gradientMove 4s ease infinite;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-.promo-carousel h2 {
-    color: #ffffff !important;
-    font-size: 34px;
-    font-weight: 950;
-    margin: 0;
-}
-
-.promo-carousel p {
-    color: #fff7ed !important;
-    font-size: 17px;
-    margin-top: 8px;
-}
-
-@keyframes gradientMove {
-    0% {background-position: 0% 50%;}
-    50% {background-position: 100% 50%;}
-    100% {background-position: 0% 50%;}
-}
-
-.badge {
-    display: inline-block;
-    padding: 7px 14px;
-    border-radius: 999px;
-    font-weight: 900;
-    font-size: 14px;
-}
-
-.disponible {
-    background: #dcfce7;
-    color: #166534 !important;
-}
-
-.ocupado {
-    background: #fee2e2;
-    color: #991b1b !important;
-}
-
-.fuera {
-    background: #e5e7eb;
-    color: #374151 !important;
-}
-
-.pendiente {
-    background: #fef3c7;
-    color: #92400e !important;
-}
-
-.aceptado {
-    background: #dbeafe;
-    color: #1d4ed8 !important;
-}
-
-.finalizado {
-    background: #dcfce7;
-    color: #166534 !important;
-}
-
-.admin-button-wrapper button {
-    width: 100% !important;
-    min-width: 190px !important;
-    height: 44px !important;
-    padding: 8px 18px !important;
-    border-radius: 999px !important;
-    white-space: nowrap !important;
-    word-break: keep-all !important;
-    overflow-wrap: normal !important;
-    font-size: 14px !important;
-    line-height: 1 !important;
-}
-
-.alerta-sonido-box {
-    background: linear-gradient(135deg, #f97316, #ef4444);
-    color: white !important;
-    border-radius: 22px;
-    padding: 18px 22px;
-    margin-bottom: 18px;
-    box-shadow: 0 18px 36px rgba(239, 68, 68, 0.24);
-    font-weight: 900;
-}
-
-.alerta-sonido-box h3,
-.alerta-sonido-box p {
-    color: white !important;
-    margin: 0;
-}
-
-[data-testid="stMetric"] {
-    background: rgba(255,255,255,0.82);
-    border: 1px solid rgba(226,232,240,0.9);
-    border-radius: 20px;
-    padding: 18px;
-    box-shadow: 0 14px 28px rgba(15,23,42,0.06);
-}
-
-[data-testid="stDataFrame"] {
-    border-radius: 20px;
-    overflow: hidden;
-}
-
-.small-note {
-    color: #6b7280 !important;
-    font-size: 14px;
-}
-
-@media(max-width: 768px) {
-    .hero h1 {
-        font-size: 36px;
+def cargar_estilos():
+    st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #fff7ed 0%, #eff6ff 100%);
+        color: #0f172a;
     }
 
-    .hero p {
+    h1, h2, h3 {
+        color: #0f172a !important;
+        font-weight: 900 !important;
+    }
+
+    p, label, span, div {
         font-size: 16px;
     }
 
-    .promo-carousel h2 {
-        font-size: 25px;
+    .card {
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid #e2e8f0;
+        border-radius: 28px;
+        padding: 28px;
+        margin-bottom: 22px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
     }
 
-    .admin-button-wrapper button {
-        min-width: 150px !important;
-        font-size: 13px !important;
+    .service-card {
+        color: white;
+        border-radius: 28px;
+        padding: 28px;
+        min-height: 190px;
+        text-align: center;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
     }
-}
 
-</style>
-""", unsafe_allow_html=True)
+    .service-card h2 {
+        color: white !important;
+        font-size: 30px !important;
+    }
+
+    .service-card p {
+        color: white !important;
+        font-weight: 600;
+    }
+
+    .badge {
+        padding: 8px 16px;
+        border-radius: 999px;
+        font-weight: 800;
+        display: inline-block;
+    }
+
+    .disponible {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .ocupado {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .fuera {
+        background: #e5e7eb;
+        color: #374151;
+    }
+
+    .pendiente {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .aceptado {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .finalizado {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    div.stButton > button {
+        border-radius: 22px !important;
+        border: none !important;
+        padding: 12px 22px !important;
+        font-weight: 800 !important;
+        background: linear-gradient(135deg, #ff7a18, #ff3d2e) !important;
+        color: white !important;
+        box-shadow: 0 15px 35px rgba(255, 61, 46, 0.25);
+    }
+
+    div.stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 18px 40px rgba(255, 61, 46, 0.35);
+    }
+
+    .stTextInput input,
+    .stTextArea textarea,
+    .stSelectbox div {
+        border-radius: 16px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# =========================================================
+# CARGA INICIAL
+# =========================================================
+
+cargar_estilos()
 # =========================================================
 # PARTE 2 / 5
-# CONEXIÓN CON GOOGLE SHEETS Y FUNCIONES AUXILIARES
-# =========================================================
-
-# =========================================================
-# CONEXIÓN GOOGLE SHEETS
+# GOOGLE SHEETS, SESIÓN, REGISTROS Y PUSH TOKEN
 # =========================================================
 
 @st.cache_resource(show_spinner=False)
 def conectar_google_sheets():
-    """
-    Conecta la aplicación Streamlit con Google Sheets usando
-    las credenciales guardadas en st.secrets.
-    """
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -476,19 +339,11 @@ def conectar_google_sheets():
 
 @st.cache_resource(show_spinner=False)
 def obtener_hoja_cache(nombre):
-    """
-    Obtiene una hoja desde Google Sheets usando caché.
-    Esto evita pedir metadata a Google en cada refresco.
-    """
     libro = conectar_google_sheets()
     return libro.worksheet(nombre)
 
 
 def obtener_hoja(nombre, encabezados):
-    """
-    Obtiene una hoja específica del archivo de Google Sheets.
-    Si la hoja no existe, la crea automáticamente.
-    """
     libro = conectar_google_sheets()
 
     try:
@@ -496,33 +351,34 @@ def obtener_hoja(nombre, encabezados):
     except gspread.WorksheetNotFound:
         hoja = libro.add_worksheet(
             title=nombre,
-            rows=200,
-            cols=len(encabezados) + 3
+            rows=500,
+            cols=len(encabezados) + 5
         )
+        hoja.append_row(encabezados)
         st.cache_resource.clear()
+        st.cache_data.clear()
+        return hoja
 
     valores = hoja.get_all_values()
 
     if not valores:
         hoja.append_row(encabezados)
         st.cache_data.clear()
-    else:
-        primera = valores[0]
+        return hoja
 
-        if primera[:len(encabezados)] != encabezados:
-            hoja.clear()
-            hoja.append_row(encabezados)
-            st.cache_data.clear()
+    encabezados_actuales = valores[0]
+
+    for encabezado in encabezados:
+        if encabezado not in encabezados_actuales:
+            nueva_columna = len(encabezados_actuales) + 1
+            hoja.update_cell(1, nueva_columna, encabezado)
+            encabezados_actuales.append(encabezado)
 
     return hoja
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def leer_registros_cache(nombre, encabezados_tuple):
-    """
-    Lee registros con caché temporal para no saturar Google Sheets.
-    ttl=30 significa que reutiliza los datos por 30 segundos.
-    """
     encabezados = list(encabezados_tuple)
     hoja = obtener_hoja(nombre, encabezados)
     filas = hoja.get_all_values()
@@ -530,11 +386,12 @@ def leer_registros_cache(nombre, encabezados_tuple):
     if len(filas) <= 1:
         return []
 
+    encabezados_reales = filas[0]
     registros = []
 
     for i, fila in enumerate(filas[1:], start=2):
-        fila_completa = fila + [""] * (len(encabezados) - len(fila))
-        registro = dict(zip(encabezados, fila_completa[:len(encabezados)]))
+        fila_completa = fila + [""] * (len(encabezados_reales) - len(fila))
+        registro = dict(zip(encabezados_reales, fila_completa[:len(encabezados_reales)]))
         registro["_fila"] = i
         registros.append(registro)
 
@@ -542,19 +399,14 @@ def leer_registros_cache(nombre, encabezados_tuple):
 
 
 def leer_registros(nombre, encabezados):
-    """
-    Lee todos los registros usando caché.
-    """
     return leer_registros_cache(nombre, tuple(encabezados))
 
 
 def agregar_registro(nombre, encabezados, datos):
-    """
-    Agrega un nuevo registro al final de la hoja indicada.
-    Luego limpia caché para que el dato nuevo se vea.
-    """
     hoja = obtener_hoja(nombre, encabezados)
-    fila = [datos.get(campo, "") for campo in encabezados]
+    encabezados_reales = hoja.row_values(1)
+
+    fila = [datos.get(campo, "") for campo in encabezados_reales]
 
     hoja.append_row(
         fila,
@@ -565,15 +417,18 @@ def agregar_registro(nombre, encabezados, datos):
 
 
 def actualizar_celda(nombre, encabezados, fila, columna, valor):
-    """
-    Actualiza una sola celda según la fila y el nombre de columna.
-    Luego limpia caché.
-    """
     hoja = obtener_hoja(nombre, encabezados)
-    indice_columna = encabezados.index(columna) + 1
+    encabezados_reales = hoja.row_values(1)
+
+    if columna not in encabezados_reales:
+        nueva_columna = len(encabezados_reales) + 1
+        hoja.update_cell(1, nueva_columna, columna)
+        encabezados_reales.append(columna)
+
+    indice_columna = encabezados_reales.index(columna) + 1
 
     hoja.update_cell(
-        fila,
+        int(fila),
         indice_columna,
         valor
     )
@@ -582,16 +437,19 @@ def actualizar_celda(nombre, encabezados, fila, columna, valor):
 
 
 def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
-    """
-    Actualiza varias columnas de una misma fila.
-    Luego limpia caché.
-    """
     hoja = obtener_hoja(nombre, encabezados)
+    encabezados_reales = hoja.row_values(1)
+
+    for columna in cambios.keys():
+        if columna not in encabezados_reales:
+            nueva_columna = len(encabezados_reales) + 1
+            hoja.update_cell(1, nueva_columna, columna)
+            encabezados_reales.append(columna)
 
     for columna, valor in cambios.items():
-        indice_columna = encabezados.index(columna) + 1
+        indice_columna = encabezados_reales.index(columna) + 1
         hoja.update_cell(
-            fila,
+            int(fila),
             indice_columna,
             valor
         )
@@ -600,45 +458,28 @@ def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
 
 
 def eliminar_fila(nombre, encabezados, fila):
-    """
-    Elimina una fila completa de una hoja.
-    Luego limpia caché.
-    """
     hoja = obtener_hoja(nombre, encabezados)
     hoja.delete_rows(int(fila))
-
     st.cache_data.clear()
 
 
 # =========================================================
-# FUNCIONES AUXILIARES GENERALES
+# FUNCIONES AUXILIARES
 # =========================================================
 
 def normalizar_usuario(texto):
-    """
-    Convierte el usuario a minúsculas y elimina espacios.
-    """
     return str(texto).strip().lower()
 
 
 def limpiar_texto(texto):
-    """
-    Limpia espacios al inicio y final del texto.
-    """
     return str(texto).strip()
 
 
 def limpiar_telefono(texto):
-    """
-    Deja solamente números en el teléfono.
-    """
     return re.sub(r"[^0-9]", "", str(texto))
 
 
 def telefono_whatsapp_cr(texto):
-    """
-    Convierte cualquier número nacional en formato WhatsApp Costa Rica.
-    """
     numero = limpiar_telefono(texto)
 
     if numero.startswith("506"):
@@ -648,44 +489,10 @@ def telefono_whatsapp_cr(texto):
 
 
 def link_whatsapp(numero, mensaje):
-    """
-    Genera un enlace directo a WhatsApp con mensaje precargado.
-    """
     return f"https://wa.me/{telefono_whatsapp_cr(numero)}?text={quote(mensaje)}"
 
 
-def usuario_existe(nombre_usuario):
-    """
-    Verifica si un nombre de usuario ya existe como cliente
-    o como colaborador.
-    """
-    usuario_n = normalizar_usuario(nombre_usuario)
-
-    usuarios = leer_registros(
-        HOJA_USUARIOS,
-        ENCABEZADOS_USUARIOS
-    )
-
-    colaboradores = leer_registros(
-        HOJA_COLABORADORES,
-        ENCABEZADOS_COLABORADORES
-    )
-
-    for u in usuarios:
-        if normalizar_usuario(u["Usuario"]) == usuario_n:
-            return True
-
-    for c in colaboradores:
-        if normalizar_usuario(c["Usuario"]) == usuario_n:
-            return True
-
-    return False
-
-
 def badge_estado(estado):
-    """
-    Devuelve una etiqueta visual HTML según el estado.
-    """
     estado_l = str(estado).strip().lower()
 
     if estado_l == "disponible":
@@ -710,14 +517,10 @@ def badge_estado(estado):
 
 
 # =========================================================
-# CONTROL DE SESIÓN
+# SESIÓN
 # =========================================================
 
 def inicializar_estado():
-    """
-    Inicializa las variables principales de sesión.
-    También inicializa variables para alertas internas.
-    """
     valores = {
         "pagina": "login",
         "tipo": None,
@@ -725,16 +528,13 @@ def inicializar_estado():
         "colaborador_actual": None,
         "servicio_seleccionado": None,
         "admin_autenticado": False,
-
-        # Variables para alertas sonoras y visuales
+        "push_token_actual": "",
         "alertas_activadas": True,
         "sonido_habilitado": False,
         "ultimo_total_pendientes_colaborador": 0,
         "ultimo_total_aceptadas_usuario": 0,
         "ultima_alerta_usuario_ids": "",
         "ultima_alerta_colaborador_ids": "",
-
-        # Evitan que la alerta se atrase o salga en el momento incorrecto
         "alerta_usuario_inicializada": False,
         "alerta_colaborador_inicializada": False
     }
@@ -745,17 +545,13 @@ def inicializar_estado():
 
 
 def cerrar_sesion():
-    """
-    Cierra cualquier sesión activa y devuelve la app al login.
-    También reinicia los controles de alertas.
-    """
     st.session_state.pagina = "login"
     st.session_state.tipo = None
     st.session_state.usuario_actual = None
     st.session_state.colaborador_actual = None
     st.session_state.servicio_seleccionado = None
     st.session_state.admin_autenticado = False
-
+    st.session_state.push_token_actual = ""
     st.session_state.ultimo_total_pendientes_colaborador = 0
     st.session_state.ultimo_total_aceptadas_usuario = 0
     st.session_state.ultima_alerta_usuario_ids = ""
@@ -765,138 +561,77 @@ def cerrar_sesion():
 
 
 # =========================================================
-# CONTADORES Y VALIDACIONES
+# PUSH TOKEN
 # =========================================================
 
-def total_usuarios_registrados():
-    """
-    Cuenta cuántos usuarios existen en la hoja Usuarios.
-    """
-    return len(
-        leer_registros(
-            HOJA_USUARIOS,
-            ENCABEZADOS_USUARIOS
-        )
-    )
-
-
-def total_colaboradores_servicio(servicio):
-    """
-    Cuenta cuántos colaboradores existen para un servicio específico.
-    """
-    colaboradores = leer_registros(
-        HOJA_COLABORADORES,
-        ENCABEZADOS_COLABORADORES
-    )
-
-    return sum(
-        1 for c in colaboradores
-        if c["Servicio"] == servicio
-    )
-
-
-# =========================================================
-# LOGIN DE USUARIOS Y COLABORADORES
-# =========================================================
-
-def buscar_usuario_login(nombre_usuario, clave):
-    """
-    Busca un usuario cliente por usuario y clave.
-    """
-    usuario_n = normalizar_usuario(nombre_usuario)
-    clave_limpia = limpiar_texto(clave)
-
+def guardar_push_token_usuario(usuario_id, token):
     usuarios = leer_registros(
         HOJA_USUARIOS,
         ENCABEZADOS_USUARIOS
     )
 
     for u in usuarios:
-        if (
-            normalizar_usuario(u["Usuario"]) == usuario_n
-            and limpiar_texto(u["Clave"]) == clave_limpia
-        ):
-            return u
+        if u.get("ID") == usuario_id:
+            actualizar_celda(
+                HOJA_USUARIOS,
+                ENCABEZADOS_USUARIOS,
+                u["_fila"],
+                "Push Token",
+                token
+            )
+            return True
 
-    return None
+    return False
 
 
-def buscar_colaborador_login(nombre_usuario, clave):
-    """
-    Busca un colaborador por usuario y clave.
-    """
-    usuario_n = normalizar_usuario(nombre_usuario)
-    clave_limpia = limpiar_texto(clave)
-
+def guardar_push_token_colaborador(colaborador_id, token):
     colaboradores = leer_registros(
         HOJA_COLABORADORES,
         ENCABEZADOS_COLABORADORES
     )
 
     for c in colaboradores:
-        if (
-            normalizar_usuario(c["Usuario"]) == usuario_n
-            and limpiar_texto(c["Clave"]) == clave_limpia
-        ):
-            return c
+        if c.get("ID") == colaborador_id:
+            actualizar_celda(
+                HOJA_COLABORADORES,
+                ENCABEZADOS_COLABORADORES,
+                c["_fila"],
+                "Push Token",
+                token
+            )
+            return True
 
-    return None
-
-
-# =========================================================
-# REGISTRO DE USUARIOS Y COLABORADORES
-# =========================================================
-
-def registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave):
-    """
-    Registra un nuevo usuario cliente en Google Sheets.
-    """
-    datos = {
-        "ID": str(uuid.uuid4())[:8],
-        "Nombre": limpiar_texto(nombre),
-        "Primer apellido": limpiar_texto(apellido1),
-        "Segundo apellido": limpiar_texto(apellido2),
-        "Teléfono": telefono_whatsapp_cr(telefono),
-        "Usuario": normalizar_usuario(usuario),
-        "Clave": limpiar_texto(clave),
-        "Tipo": "Usuario",
-        "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M")
-    }
-
-    agregar_registro(
-        HOJA_USUARIOS,
-        ENCABEZADOS_USUARIOS,
-        datos
-    )
-
-    return datos
+    return False
 
 
-def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave, servicio):
-    """
-    Registra un nuevo colaborador/trabajador en Google Sheets.
-    """
-    datos = {
-        "ID": str(uuid.uuid4())[:8],
-        "Nombre": limpiar_texto(nombre),
-        "Primer apellido": limpiar_texto(apellido1),
-        "Segundo apellido": limpiar_texto(apellido2),
-        "Teléfono": telefono_whatsapp_cr(telefono),
-        "Usuario": normalizar_usuario(usuario),
-        "Clave": limpiar_texto(clave),
-        "Tipo": "Colaborador",
-        "Servicio": servicio,
-        "Estado": "Disponible",
-        "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M")
-    }
+def enviar_push_token(token, titulo, cuerpo):
+    if not token:
+        return False
 
-    agregar_registro(
-        HOJA_COLABORADORES,
-        ENCABEZADOS_COLABORADORES,
-        datos
-    )
+    try:
+        if not firebase_disponible():
+            return False
 
-    return datos
+        mensaje = messaging.Message(
+            token=token,
+            notification=messaging.Notification(
+                title=titulo,
+                body=cuerpo
+            ),
+            webpush=messaging.WebpushConfig(
+                notification=messaging.WebpushNotification(
+                    title=titulo,
+                    body=cuerpo,
+                    require_interaction=True
+                )
+            )
+        )
+
+        messaging.send(mensaje)
+        return True
+
+    except Exception:
+        return False
 # =========================================================
 # PARTE 3 / 5
 # SOLICITUDES, COMPONENTES VISUALES, ALERTAS Y FORMULARIOS
