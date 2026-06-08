@@ -465,10 +465,6 @@ input, textarea, select {
 
 @st.cache_resource(show_spinner=False)
 def conectar_google_sheets():
-    """
-    Conecta la aplicación Streamlit con Google Sheets usando
-    las credenciales guardadas en st.secrets.
-    """
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -487,20 +483,11 @@ def conectar_google_sheets():
 
 @st.cache_resource(show_spinner=False)
 def obtener_hoja_cache(nombre):
-    """
-    Obtiene una hoja desde Google Sheets usando caché.
-    Esto evita pedir metadata a Google en cada refresco.
-    """
     libro = conectar_google_sheets()
     return libro.worksheet(nombre)
 
 
 def obtener_hoja(nombre, encabezados):
-    """
-    Obtiene una hoja específica.
-    Si la hoja no existe, la crea.
-    Si los encabezados no coinciden, limpia la hoja y los vuelve a crear.
-    """
     libro = conectar_google_sheets()
 
     try:
@@ -521,23 +508,20 @@ def obtener_hoja(nombre, encabezados):
     if not valores:
         hoja.append_row(encabezados)
         st.cache_data.clear()
-    else:
-        primera = valores[0]
+        return hoja
 
-        if primera[:len(encabezados)] != encabezados:
-            hoja.clear()
-            hoja.append_row(encabezados)
-            st.cache_data.clear()
+    primera = valores[0]
+
+    if primera[:len(encabezados)] != encabezados:
+        hoja.clear()
+        hoja.append_row(encabezados)
+        st.cache_data.clear()
 
     return hoja
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def leer_registros_cache(nombre, encabezados_tuple):
-    """
-    Lee registros con caché temporal para no saturar Google Sheets.
-    ttl=30 significa que reutiliza los datos por 30 segundos.
-    """
     encabezados = list(encabezados_tuple)
     hoja = obtener_hoja(nombre, encabezados)
     filas = hoja.get_all_values()
@@ -557,17 +541,10 @@ def leer_registros_cache(nombre, encabezados_tuple):
 
 
 def leer_registros(nombre, encabezados):
-    """
-    Lee todos los registros usando caché.
-    """
     return leer_registros_cache(nombre, tuple(encabezados))
 
 
 def agregar_registro(nombre, encabezados, datos):
-    """
-    Agrega un nuevo registro al final de la hoja indicada.
-    Luego limpia caché para que el dato nuevo se vea.
-    """
     hoja = obtener_hoja(nombre, encabezados)
     fila = [datos.get(campo, "") for campo in encabezados]
 
@@ -580,10 +557,6 @@ def agregar_registro(nombre, encabezados, datos):
 
 
 def actualizar_celda(nombre, encabezados, fila, columna, valor):
-    """
-    Actualiza una sola celda según la fila y el nombre de columna.
-    Luego limpia caché.
-    """
     hoja = obtener_hoja(nombre, encabezados)
     indice_columna = encabezados.index(columna) + 1
 
@@ -597,10 +570,6 @@ def actualizar_celda(nombre, encabezados, fila, columna, valor):
 
 
 def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
-    """
-    Actualiza varias columnas de una misma fila.
-    Luego limpia caché.
-    """
     hoja = obtener_hoja(nombre, encabezados)
 
     for columna, valor in cambios.items():
@@ -615,13 +584,8 @@ def actualizar_varias_celdas(nombre, encabezados, fila, cambios):
 
 
 def eliminar_fila(nombre, encabezados, fila):
-    """
-    Elimina una fila completa de una hoja.
-    Luego limpia caché.
-    """
     hoja = obtener_hoja(nombre, encabezados)
     hoja.delete_rows(int(fila))
-
     st.cache_data.clear()
 
 
@@ -631,11 +595,6 @@ def eliminar_fila(nombre, encabezados, fila):
 
 @st.cache_resource(show_spinner=False)
 def inicializar_firebase_admin():
-    """
-    Inicializa Firebase Admin desde st.secrets.
-    En Streamlit Cloud debes guardar la clave nueva en:
-    firebase_service_account
-    """
     if firebase_admin._apps:
         return firebase_admin.get_app()
 
@@ -651,9 +610,6 @@ def inicializar_firebase_admin():
 
 
 def firebase_disponible():
-    """
-    Verifica si Firebase Admin está disponible.
-    """
     try:
         app = inicializar_firebase_admin()
         return app is not None
@@ -662,9 +618,6 @@ def firebase_disponible():
 
 
 def enviar_push_token(token, titulo, cuerpo):
-    """
-    Envía una notificación push real a un token FCM.
-    """
     if not token:
         return False
 
@@ -694,10 +647,11 @@ def enviar_push_token(token, titulo, cuerpo):
         return False
 
 
+# =========================================================
+# PUSH TOKEN AUTOMÁTICO
+# =========================================================
+
 def guardar_push_token_usuario(usuario_id, token):
-    """
-    Guarda el Push Token en la hoja Usuarios.
-    """
     usuarios = leer_registros(
         HOJA_USUARIOS,
         ENCABEZADOS_USUARIOS
@@ -718,9 +672,6 @@ def guardar_push_token_usuario(usuario_id, token):
 
 
 def guardar_push_token_colaborador(colaborador_id, token):
-    """
-    Guarda el Push Token en la hoja Datos generales.
-    """
     colaboradores = leer_registros(
         HOJA_COLABORADORES,
         ENCABEZADOS_COLABORADORES
@@ -740,10 +691,59 @@ def guardar_push_token_colaborador(colaborador_id, token):
     return False
 
 
+def guardar_push_token_por_tipo(tipo, persona_id, token):
+    if tipo == "Usuario":
+        return guardar_push_token_usuario(persona_id, token)
+
+    if tipo == "Colaborador":
+        return guardar_push_token_colaborador(persona_id, token)
+
+    return False
+
+
+def procesar_token_push_desde_url():
+    """
+    Recibe automáticamente el token enviado desde Firebase Hosting.
+    URL esperada:
+    ?push_token=TOKEN&push_tipo=Usuario&push_id=ID
+    """
+    try:
+        params = st.query_params
+
+        token = params.get("push_token", "")
+        tipo = params.get("push_tipo", "")
+        persona_id = params.get("push_id", "")
+
+        if not token or not tipo or not persona_id:
+            return
+
+        ok = guardar_push_token_por_tipo(
+            tipo,
+            persona_id,
+            token
+        )
+
+        if ok:
+            if tipo == "Usuario" and st.session_state.get("usuario_actual"):
+                if st.session_state.usuario_actual.get("ID") == persona_id:
+                    st.session_state.usuario_actual["Push Token"] = token
+
+            if tipo == "Colaborador" and st.session_state.get("colaborador_actual"):
+                if st.session_state.colaborador_actual.get("ID") == persona_id:
+                    st.session_state.colaborador_actual["Push Token"] = token
+
+            st.query_params.clear()
+            st.success("✅ Notificaciones activadas correctamente en este dispositivo.")
+
+        else:
+            st.query_params.clear()
+            st.warning("No se pudo guardar el token de notificaciones.")
+
+    except Exception:
+        pass
+
+
 def notificar_usuario_por_id(usuario_id, titulo, mensaje):
-    """
-    Busca el token del usuario y le envía una notificación push.
-    """
     usuarios = leer_registros(
         HOJA_USUARIOS,
         ENCABEZADOS_USUARIOS
@@ -767,9 +767,6 @@ def notificar_usuario_por_id(usuario_id, titulo, mensaje):
 
 
 def notificar_colaboradores_disponibles(servicio, titulo, mensaje):
-    """
-    Envía notificación push a colaboradores disponibles del servicio.
-    """
     colaboradores = leer_registros(
         HOJA_COLABORADORES,
         ENCABEZADOS_COLABORADORES
@@ -800,30 +797,18 @@ def notificar_colaboradores_disponibles(servicio, titulo, mensaje):
 # =========================================================
 
 def normalizar_usuario(texto):
-    """
-    Convierte el usuario a minúsculas y elimina espacios.
-    """
     return str(texto).strip().lower()
 
 
 def limpiar_texto(texto):
-    """
-    Limpia espacios al inicio y final del texto.
-    """
     return str(texto).strip()
 
 
 def limpiar_telefono(texto):
-    """
-    Deja solamente números en el teléfono.
-    """
     return re.sub(r"[^0-9]", "", str(texto))
 
 
 def telefono_whatsapp_cr(texto):
-    """
-    Convierte cualquier número nacional en formato WhatsApp Costa Rica.
-    """
     numero = limpiar_telefono(texto)
 
     if numero.startswith("506"):
@@ -833,17 +818,10 @@ def telefono_whatsapp_cr(texto):
 
 
 def link_whatsapp(numero, mensaje):
-    """
-    Genera un enlace directo a WhatsApp con mensaje precargado.
-    """
     return f"https://wa.me/{telefono_whatsapp_cr(numero)}?text={quote(mensaje)}"
 
 
 def usuario_existe(nombre_usuario):
-    """
-    Verifica si un nombre de usuario ya existe como cliente
-    o como colaborador.
-    """
     usuario_n = normalizar_usuario(nombre_usuario)
 
     usuarios = leer_registros(
@@ -868,9 +846,6 @@ def usuario_existe(nombre_usuario):
 
 
 def badge_estado(estado):
-    """
-    Devuelve una etiqueta visual HTML según el estado.
-    """
     estado_l = str(estado).strip().lower()
 
     if estado_l == "disponible":
@@ -899,10 +874,6 @@ def badge_estado(estado):
 # =========================================================
 
 def inicializar_estado():
-    """
-    Inicializa las variables principales de sesión.
-    También inicializa variables para alertas internas.
-    """
     valores = {
         "pagina": "login",
         "tipo": None,
@@ -911,7 +882,6 @@ def inicializar_estado():
         "servicio_seleccionado": None,
         "admin_autenticado": False,
 
-        # Variables para alertas sonoras y visuales
         "alertas_activadas": True,
         "sonido_habilitado": False,
         "ultimo_total_pendientes_colaborador": 0,
@@ -919,7 +889,6 @@ def inicializar_estado():
         "ultima_alerta_usuario_ids": "",
         "ultima_alerta_colaborador_ids": "",
 
-        # Evitan que la alerta se atrase o salga en el momento incorrecto
         "alerta_usuario_inicializada": False,
         "alerta_colaborador_inicializada": False
     }
@@ -930,10 +899,6 @@ def inicializar_estado():
 
 
 def cerrar_sesion():
-    """
-    Cierra cualquier sesión activa y devuelve la app al login.
-    También reinicia los controles de alertas.
-    """
     st.session_state.pagina = "login"
     st.session_state.tipo = None
     st.session_state.usuario_actual = None
@@ -954,9 +919,6 @@ def cerrar_sesion():
 # =========================================================
 
 def total_usuarios_registrados():
-    """
-    Cuenta cuántos usuarios existen en la hoja Usuarios.
-    """
     return len(
         leer_registros(
             HOJA_USUARIOS,
@@ -966,9 +928,6 @@ def total_usuarios_registrados():
 
 
 def total_colaboradores_servicio(servicio):
-    """
-    Cuenta cuántos colaboradores existen para un servicio específico.
-    """
     colaboradores = leer_registros(
         HOJA_COLABORADORES,
         ENCABEZADOS_COLABORADORES
@@ -985,9 +944,6 @@ def total_colaboradores_servicio(servicio):
 # =========================================================
 
 def buscar_usuario_login(nombre_usuario, clave):
-    """
-    Busca un usuario cliente por usuario y clave.
-    """
     usuario_n = normalizar_usuario(nombre_usuario)
     clave_limpia = limpiar_texto(clave)
 
@@ -1007,9 +963,6 @@ def buscar_usuario_login(nombre_usuario, clave):
 
 
 def buscar_colaborador_login(nombre_usuario, clave):
-    """
-    Busca un colaborador por usuario y clave.
-    """
     usuario_n = normalizar_usuario(nombre_usuario)
     clave_limpia = limpiar_texto(clave)
 
@@ -1033,9 +986,6 @@ def buscar_colaborador_login(nombre_usuario, clave):
 # =========================================================
 
 def registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave):
-    """
-    Registra un nuevo usuario cliente en Google Sheets.
-    """
     datos = {
         "ID": str(uuid.uuid4())[:8],
         "Nombre": limpiar_texto(nombre),
@@ -1059,9 +1009,6 @@ def registrar_usuario(nombre, apellido1, apellido2, telefono, usuario, clave):
 
 
 def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave, servicio):
-    """
-    Registra un nuevo colaborador/trabajador en Google Sheets.
-    """
     datos = {
         "ID": str(uuid.uuid4())[:8],
         "Nombre": limpiar_texto(nombre),
@@ -1084,7 +1031,7 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
     )
 
     return datos
-    # =========================================================
+# =========================================================
 # PARTE 3 / 5
 # SOLICITUDES, COMPONENTES VISUALES, ALERTAS, PUSH Y FORMULARIOS
 # =========================================================
@@ -1094,10 +1041,6 @@ def registrar_colaborador(nombre, apellido1, apellido2, telefono, usuario, clave
 # =========================================================
 
 def crear_solicitud(servicio, usuario, detalle):
-    """
-    Crea una nueva solicitud de servicio hecha por un usuario.
-    También notifica por Firebase Push a los colaboradores disponibles.
-    """
     datos = {
         "ID": str(uuid.uuid4())[:8],
         "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -1200,11 +1143,6 @@ def actualizar_estado_colaborador(colaborador, nuevo_estado):
 
 
 def aceptar_solicitud(solicitud, colaborador):
-    """
-    Acepta una solicitud pendiente.
-    Si otro colaborador ya la aceptó, bloquea la acción.
-    También notifica al usuario por Firebase Push.
-    """
     solicitudes_actuales = leer_registros(
         HOJA_SOLICITUDES,
         ENCABEZADOS_SOLICITUDES
@@ -1256,10 +1194,6 @@ def aceptar_solicitud(solicitud, colaborador):
 
 
 def finalizar_solicitud(solicitud, colaborador):
-    """
-    Finaliza una solicitud y devuelve al colaborador a Disponible.
-    También notifica al usuario por Firebase Push.
-    """
     actualizar_celda(
         HOJA_SOLICITUDES,
         ENCABEZADOS_SOLICITUDES,
@@ -1283,69 +1217,74 @@ def finalizar_solicitud(solicitud, colaborador):
 
 
 # =========================================================
-# BLOQUE PARA GUARDAR TOKEN PUSH
+# ACTIVACIÓN AUTOMÁTICA DE NOTIFICACIONES PUSH
 # =========================================================
 
+def obtener_datos_push_actuales():
+    if st.session_state.tipo == "Usuario" and st.session_state.usuario_actual:
+        return {
+            "tipo": "Usuario",
+            "id": st.session_state.usuario_actual["ID"],
+            "token": st.session_state.usuario_actual.get("Push Token", "")
+        }
+
+    if st.session_state.tipo == "Colaborador" and st.session_state.colaborador_actual:
+        return {
+            "tipo": "Colaborador",
+            "id": st.session_state.colaborador_actual["ID"],
+            "token": st.session_state.colaborador_actual.get("Push Token", "")
+        }
+
+    return None
+
+
+def url_activar_push():
+    datos = obtener_datos_push_actuales()
+
+    if not datos:
+        return PWA_NOTIFICACIONES_URL
+
+    return (
+        f"{PWA_NOTIFICACIONES_URL}"
+        f"?push_tipo={quote(datos['tipo'])}"
+        f"&push_id={quote(datos['id'])}"
+    )
+
+
 def bloque_activar_notificaciones():
-    """
-    Permite abrir la PWA de notificaciones, copiar el token
-    y guardarlo en el usuario o colaborador actual.
-    """
+    datos = obtener_datos_push_actuales()
+
+    if not datos:
+        return
+
+    token_actual = datos.get("token", "").strip()
+
+    if token_actual:
+        st.markdown("""
+        <div class="card">
+            <h3>🔔 Notificaciones activadas</h3>
+            <p style="color:#16a34a !important; font-weight:800;">
+                Este dispositivo ya tiene notificaciones push registradas.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
     st.markdown("""
     <div class="card">
-        <h3>🔔 Notificaciones reales del dispositivo</h3>
+        <h3>🔔 Activar notificaciones</h3>
         <p style="color:#64748b !important;">
-            Abra la página de activación, presione el botón para generar el token,
-            copie el token completo y péguelo aquí.
+            Active las notificaciones una sola vez para recibir avisos automáticos
+            cuando haya solicitudes, aceptaciones o cambios de estado.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
     st.link_button(
-        "🔔 Abrir página para activar notificaciones",
-        PWA_NOTIFICACIONES_URL,
+        "🔔 Activar notificaciones en este dispositivo",
+        url_activar_push(),
         use_container_width=True
     )
-
-    token = st.text_area(
-        "Pegue aquí el TOKEN DEL DISPOSITIVO",
-        height=120,
-        placeholder="Pegue aquí el token completo generado en la página de notificaciones..."
-    )
-
-    if st.button("💾 Guardar token de este dispositivo", use_container_width=True):
-        if not token.strip():
-            st.error("Debe pegar el token generado.")
-            return
-
-        token_limpio = token.strip()
-
-        if st.session_state.tipo == "Usuario" and st.session_state.usuario_actual:
-            ok = guardar_push_token_usuario(
-                st.session_state.usuario_actual["ID"],
-                token_limpio
-            )
-
-            if ok:
-                st.session_state.usuario_actual["Push Token"] = token_limpio
-                st.success("Token guardado correctamente para este usuario.")
-            else:
-                st.error("No se pudo guardar el token del usuario.")
-
-        elif st.session_state.tipo == "Colaborador" and st.session_state.colaborador_actual:
-            ok = guardar_push_token_colaborador(
-                st.session_state.colaborador_actual["ID"],
-                token_limpio
-            )
-
-            if ok:
-                st.session_state.colaborador_actual["Push Token"] = token_limpio
-                st.success("Token guardado correctamente para este colaborador.")
-            else:
-                st.error("No se pudo guardar el token del colaborador.")
-
-        else:
-            st.warning("Debe iniciar sesión como usuario o colaborador.")
 
 
 # =========================================================
@@ -1547,12 +1486,6 @@ def sidebar_menu():
             if st.button("👤 Cambiar mis datos", use_container_width=True):
                 st.session_state.pagina = "editar_usuario"
                 st.rerun()
-
-        st.link_button(
-            "🔔 Activar notificaciones push",
-            PWA_NOTIFICACIONES_URL,
-            use_container_width=True
-        )
 
         st.link_button(
             "💬 Ayuda WhatsApp",
@@ -2725,6 +2658,7 @@ def pagina_panel_admin():
 # =========================================================
 
 inicializar_estado()
+procesar_token_push_desde_url()
 
 try:
     if st.session_state.pagina == "login":
